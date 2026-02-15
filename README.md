@@ -37,3 +37,41 @@ This project provides a Python GUI application for managing, labeling, and runni
 
 ## Installation
 ADD STEPS HERE WHEN WE GET THERE
+
+
+
+           ┌─────────────────┐
+           │  GUI on Local   │
+           │  Machine        │
+           └────────┬────────┘
+                    │ Load images
+                    ▼
+           ┌─────────────────┐
+           │  Image Folder   │
+           │  (User Selected)│
+           └────────┬────────┘
+                    │ Run YOLO Prediction
+                    ▼
+           ┌─────────────────┐
+           │  Predicted      │
+           │  Labels         │
+           └────────┬────────┘
+                    │ Confirm / Modify
+                    ▼
+           ┌─────────────────┐
+           │  training_images│
+           │  (New Labels)   │
+           └────────┬────────┘
+                    │ Pull for Training
+                    ▼
+           ┌─────────────────┐
+           │  YOLO Training  │
+           │  Server (Lambda)│
+           └────────┬────────┘
+                    │ New best.pt Model
+                    ▼
+           ┌─────────────────┐
+           │  GUI on Local   │
+           │  Machine        │
+           └─────────────────┘
+
