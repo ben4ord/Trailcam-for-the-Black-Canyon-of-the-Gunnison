@@ -1,0 +1,49 @@
+path: dataset
+
+train: images
+val: images
+
+nc: 41
+
+names:
+  0: bighorn sheep
+  1: bird unspecified
+  2: black bear
+  3: bobcat
+  4: canis familiaris (dog)
+  5: canis latrans (coyote)
+  6: cervus canadensis (elk)
+  7: chipmunk
+  8: class aves (birds)
+  9: coyote
+  10: domestic cow
+  11: domestic dog
+  12: elk
+  13: family leporidae (hares)
+  14: family mephitidae (skunks)
+  15: family mustelidae (mustelids)
+  16: family sciuridae (squirrels)
+  17: genus marmota (marmots)
+  18: genus tamias (chipmunks)
+  19: horse
+  20: lagomorph
+  21: lynx rufus (bobcat)
+  22: meleagris gallopavo (common turkey)
+  23: mule deer
+  24: odocoileus hemionus (mule deer)
+  25: odocoileus virginianus (white-tailed deer)
+  26: order rodentia (rodents)
+  27: ovis canadensis (bighorn sheep)
+  28: person
+  29: puma concolor (cougar)
+  30: raccoon
+  31: red fox
+  32: rodent
+  33: skunk
+  34: squirrel
+  35: taxidea taxus (american badger)
+  36: turkey
+  37: unidentified animal
+  38: ursus americanus (american black bear)
+  39: vehicle
+  40: vulpes vulpes (red fox)
