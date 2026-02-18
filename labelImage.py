@@ -1,41 +1,31 @@
 from ultralytics import YOLO
 import cv2
 import os
+import sys
+
 
 class ImageLabeler:
     def __init__(self, model_path="yolov8n.pt", output_dir="labeledImgs"):
-        self.model = YOLO(model_path)
+        
+        # Detect if running inside PyInstaller bundle
+        if hasattr(sys, "_MEIPASS"):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.abspath(".")
+
+        # Resolve full model path
+        full_model_path = os.path.join(base_path, model_path)
+
+        self.model = YOLO(full_model_path)
         self.output_dir = output_dir
 
         os.makedirs(self.output_dir, exist_ok=True)
 
     def label_image(self, image_path: str) -> str:
-        image = cv2.imread(image_path)
-        if image is None:
-            raise ValueError(f"Failed to load image: {image_path}")
 
-        results = self.model(image)
+        results = self.model(image_path, verbose=False)
 
-        for result in results:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
+        # output_path = os.path.join(self.output_dir, "currentLabel.png")
+        # cv2.imwrite(output_path, results[0].plot())
 
-                label = f"{self.model.names[cls]} {conf:.2f}"
-
-                cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                cv2.putText(
-                    image,
-                    label,
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 0, 0),
-                    2
-                )
-
-        output_path = os.path.join(self.output_dir, "currentLabel.png")
-        cv2.imwrite(output_path, image)
-
-        return output_path
+        return results[0].plot()

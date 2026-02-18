@@ -1,10 +1,19 @@
-import sys
 import os
-from PySide6.QtWidgets import QApplication, QWidget, QGridLayout, QPushButton, QMainWindow, QLabel,QLineEdit, QFileDialog
+from pathlib import Path
+from PIL import Image
+from PySide6.QtWidgets import (
+    QWidget,
+    QGridLayout,
+    QPushButton,
+    QMainWindow,
+    QLabel,
+    QLineEdit,
+    QFileDialog
+)
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
+import cv2
 from labelImage import ImageLabeler
-from pathlib import Path
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -33,7 +42,7 @@ class ImageLoader(QMainWindow):
         
         # 2. If images exist, load the first one into the label
         if self.images:
-            self.display_image(self.images[self.current_index])
+            self.update_display()
 
         self.previousImage = QPushButton('<- Previous')
         self.previousImage.clicked.connect(self.previous_image)
@@ -68,26 +77,31 @@ class ImageLoader(QMainWindow):
         path = self.images[self.current_index]
         labeler = ImageLabeler()
         labeled_path = labeler.label_image(path)
-        pixmap = QPixmap(labeled_path)
+        color_correction = cv2.cvtColor(labeled_path,cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(color_correction)
+        pixmap = QPixmap.fromImage(pil_image.toqimage())
         scaled_pixmap = pixmap.scaled(500, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         self.image_label.setPixmap(scaled_pixmap)
-        print(f"Viewing: {os.path.basename(path)}")
+        #print(f"Viewing: {os.path.basename(path)}")
 
-    #sets initial  image 
-    def display_image(self, path):
-        labeler = ImageLabeler()
-        labeled_path = labeler.label_image(path)
-        pixmap = QPixmap(labeled_path)
-        # Optional: Scale image to fit the window while keeping aspect ratio
-        scaled_pixmap = pixmap.scaled(500, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.image_label.setPixmap(scaled_pixmap)
+    # #sets initial  image 
+    # def display_image(self, path):
+    #     labeler = ImageLabeler()
+    #     labeled_path = labeler.label_image(path)
+    #     color_correction = cv2.cvtColor(labeled_path,cv2.COLOR_BGR2RGB)
+    #     pil_image = Image.fromarray(color_correction)
+    #     pixmap = QPixmap.fromImage(pil_image.toqimage())
+
+    #     # Optional: Scale image to fit the window while keeping aspect ratio
+    #     scaled_pixmap = pixmap.scaled(500, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    #     self.image_label.setPixmap(scaled_pixmap)
 
     def get_imgs(self, drive, new_dir=False):
         if(new_dir):
             self.images.clear()
         imgs = []
-        print(f"Getting images from {drive}")
+        # print(f"Getting images from {drive}")
         if os.path.exists(drive):
             for filename in os.listdir(drive):
                 # Check for image extension AND ensure it doesn't start with '.'

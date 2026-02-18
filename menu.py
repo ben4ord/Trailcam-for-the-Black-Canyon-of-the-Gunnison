@@ -1,9 +1,5 @@
-import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout,QGridLayout, QPushButton, QLineEdit,QTextBrowser,QSlider,QProgressBar,QComboBox,QListWidget,QRadioButton, QTextEdit,QCheckBox
-from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
 from image_loader import ImageLoader
-
 
 
 class MenuWindow(QMainWindow):

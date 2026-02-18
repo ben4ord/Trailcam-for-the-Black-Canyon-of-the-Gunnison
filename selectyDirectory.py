@@ -1,9 +1,17 @@
 import sys
-from PySide6.QtWidgets import *
-# from PyQt6.QtWidgets import QApplication,  QFileDialog, QWidget, QGridLayout, QLineEdit, QPushButton, QLabel
 from pathlib import Path
-from menu import MenuWindow
 
+from PySide6.QtWidgets import (
+    QApplication,
+    QWidget,
+    QGridLayout,
+    QPushButton,
+    QLineEdit,
+    QLabel,
+    QFileDialog,
+)
+
+from menu import MenuWindow
 
 class MainWindow(QWidget):
     def __init__(self, *args, **kwargs):
@@ -38,13 +46,13 @@ class MainWindow(QWidget):
             self.dir_name_edit.setText(str(path))
 
     def next_window(self):
-        if not self.dir_name_edit:
+        if not self.dir_name_edit.text():
             print("No drive selected")
             return
 
         self.nextWindow = MenuWindow(self.dir_name_edit.text())
         self.nextWindow.show()
-        window.close()
+        self.close()
 
 
 
