@@ -1,6 +1,5 @@
-from PySide6.QtWidgets import *
-from PySide6.QtCore import *
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMainWindow, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QApplication
 from image_loader import ImageLoader
 from folder_selector import FolderSelector
 from pathlib import Path
