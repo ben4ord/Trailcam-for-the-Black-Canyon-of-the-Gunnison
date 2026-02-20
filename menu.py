@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
-from image_loader import ImageLoader
+from image_viewer import ImageLoader
 
 
 class MenuWindow(QMainWindow):
