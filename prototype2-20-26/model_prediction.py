@@ -2,6 +2,7 @@ from ultralytics import YOLO
 import cv2
 import os
 import sys
+import numpy as np
 
 
 class ImageLabeler:
@@ -18,7 +19,7 @@ class ImageLabeler:
 
         self.model = YOLO(full_model_path)
 
-    def label_image(self, image_path: str) -> str:
+    def label_image(self, image_path: str) -> np.ndarray:
 
         results = self.model(image_path, verbose=False)
 
@@ -26,3 +27,4 @@ class ImageLabeler:
         # cv2.imwrite(output_path, results[0].plot())
 
         return results[0].plot()
+

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QHBoxLayout,
+    QAbstractItemView,
     QAbstractItemView
 )
 
@@ -241,7 +242,7 @@ class ImageLoader(QMainWindow):
     def clear_search_bar(self):
         self.search_box.setText('')
         item = self.image_list.item(self.current_index)
-        self.image_list.scrollToItem(item, QAbstractItemView.PositionAtCenter)
+        self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
         
 
     def next_image(self):
