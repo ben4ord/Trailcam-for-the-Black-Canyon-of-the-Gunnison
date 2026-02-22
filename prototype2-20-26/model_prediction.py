@@ -5,7 +5,7 @@ import sys
 
 
 class ImageLabeler:
-    def __init__(self, model_path="yolov8n.pt", output_dir="labeledImgs"):
+    def __init__(self, model_path="yolov8n.pt"):
         
         # Detect if running inside PyInstaller bundle
         if hasattr(sys, "_MEIPASS"):
@@ -17,9 +17,6 @@ class ImageLabeler:
         full_model_path = os.path.join(base_path, model_path)
 
         self.model = YOLO(full_model_path)
-        self.output_dir = output_dir
-
-        os.makedirs(self.output_dir, exist_ok=True)
 
     def label_image(self, image_path: str) -> str:
 

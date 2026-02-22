@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 from PIL import Image
 from PySide6.QtWidgets import (
@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QListWidget,
     QListWidgetItem,
-    QHBoxLayout
+    QHBoxLayout,
+    QAbstractItemView
 )
 
 import qtawesome as qta
@@ -127,6 +128,8 @@ class ImageLoader(QMainWindow):
         self.image_list = QListWidget()     
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
+        self.clear_search = QPushButton("❌")
+        self.clear_search.clicked.connect(self.clear_search_bar)
         # If images exist, load the first one into the label
         if self.images:
             self.update_display()
@@ -144,7 +147,9 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.title_bar, 0, 0, 1, 5)
 
         # top row
-        layout.addWidget(self.search_box, 1, 4)
+        layout.addWidget(QLabel('Current Directory:'), 0, 0)
+        layout.addWidget(self.search_box, 0, 4)
+        layout.addWidget(self.clear_search,0,5)
 
         # image area
         layout.addWidget(self.image_label, 2, 0, 1, 3)
@@ -155,7 +160,7 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.image_list, 2, 4, 2, 1)
 
         # connect the signal for when user clicks image path
-        self.image_list.itemClicked.connect(self.on_item_clicked)
+        self.image_list.itemClicked.connect(self.on_list_item_clicked)
         # Connect to search function
         self.search_box.textChanged.connect(self.filter_list)
 
@@ -229,11 +234,16 @@ class ImageLoader(QMainWindow):
                 return True
         return super().eventFilter(obj, event)
 
-
-    def on_item_clicked(self, item):
+    
+    def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
         self.update_display()
     
+    def clear_search_bar(self):
+        self.search_box.setText('')
+        item = self.image_list.item(self.current_index)
+        self.image_list.scrollToItem(item, QAbstractItemView.PositionAtCenter)
+        
 
     def next_image(self):
         # Moves forward and wraps to 0 if at the end
@@ -294,9 +304,9 @@ class ImageLoader(QMainWindow):
             item = self.image_list.item(row)
 
             filename = item.text().lower()
-            full_path = item.data(Qt.ItemDataRole.UserRole).lower()
+            #full_path = item.data(Qt.UserRole).lower()
 
-            match = text in filename or text in full_path
+            match = text in filename
             item.setHidden(not match)
 
     def menu_window(self):
