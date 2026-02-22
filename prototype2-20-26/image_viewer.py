@@ -144,12 +144,11 @@ class ImageLoader(QMainWindow):
         layout.setColumnStretch(3, 1)   # horizontal spacer
         layout.setRowStretch(2, 1)      # main content grows
 
-        layout.addWidget(self.title_bar, 0, 0, 1, 5)
+        layout.addWidget(self.title_bar, 0, 0, 1, 6)
 
         # top row
-        layout.addWidget(QLabel('Current Directory:'), 0, 0)
-        layout.addWidget(self.search_box, 0, 4)
-        layout.addWidget(self.clear_search,0,5)
+        layout.addWidget(self.search_box, 1, 4)
+        layout.addWidget(self.clear_search, 1, 5)
 
         # image area
         layout.addWidget(self.image_label, 2, 0, 1, 3)
@@ -157,7 +156,7 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.nextImage, 3, 2)
 
         # right panel image list
-        layout.addWidget(self.image_list, 2, 4, 2, 1)
+        layout.addWidget(self.image_list, 2, 4, 2, 2)
 
         # connect the signal for when user clicks image path
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
