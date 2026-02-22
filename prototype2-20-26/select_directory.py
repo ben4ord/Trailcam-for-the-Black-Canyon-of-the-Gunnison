@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QLabel,
-    QFileDialog,
+    QFileDialog
 )
 
 from menu import MenuWindow

@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 from PIL import Image
 from PySide6.QtWidgets import (
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QListWidget,
     QListWidgetItem,
+    QAbstractItemView,
     QHBoxLayout
 )
 
@@ -33,6 +34,7 @@ class ImageLoader(QMainWindow):
         self._drag_position = QPoint()
         self._press_pos = QPoint()
 
+        self.setWindowTitle('Image Loader')
         self.setGeometry(100, 100, 600, 400) # Made it slightly larger to fit an image
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
@@ -127,6 +129,8 @@ class ImageLoader(QMainWindow):
         self.image_list = QListWidget()     
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
+        self.clear_search = QPushButton("❌")
+        self.clear_search.clicked.connect(self.clear_search_bar)
         # If images exist, load the first one into the label
         if self.images:
             self.update_display()
@@ -136,15 +140,16 @@ class ImageLoader(QMainWindow):
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
 
+
         # 3. Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
         layout.setColumnStretch(3, 1)   # horizontal spacer
         layout.setRowStretch(2, 1)      # main content grows
-
-        layout.addWidget(self.title_bar, 0, 0, 1, 5)
+        layout.addWidget(self.title_bar, 0, 0, 1, 6)
 
         # top row
         layout.addWidget(self.search_box, 1, 4)
+        layout.addWidget(self.clear_search,1,5)
 
         # image area
         layout.addWidget(self.image_label, 2, 0, 1, 3)
@@ -152,17 +157,17 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.nextImage, 3, 2)
 
         # right panel image list
-        layout.addWidget(self.image_list, 2, 4, 2, 1)
+        layout.addWidget(self.image_list, 2, 4, 2, 2)
 
         # connect the signal for when user clicks image path
-        self.image_list.itemClicked.connect(self.on_item_clicked)
+        self.image_list.itemClicked.connect(self.on_list_item_clicked)
         # Connect to search function
         self.search_box.textChanged.connect(self.filter_list)
 
         # Load in list of images 
         for image in self.images:
             item = QListWidgetItem(Path(image).name)   # show only filename
-            item.setData(Qt.ItemDataRole.UserRole, image)           # store full path internally
+            item.setData(Qt.UserRole, image)           # store full path internally
             self.image_list.addItem(item)
             #print(image)
        
@@ -230,10 +235,19 @@ class ImageLoader(QMainWindow):
         return super().eventFilter(obj, event)
 
 
-    def on_item_clicked(self, item):
+    def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
         self.update_display()
     
+    def on_list_item_clicked(self, item):
+        self.current_index = self.image_list.row(item)
+        self.update_display()
+    
+    def clear_search_bar(self):
+        self.search_box.setText('')
+        item = self.image_list.item(self.current_index)
+        self.image_list.scrollToItem(item, QAbstractItemView.PositionAtCenter)
+        
 
     def next_image(self):
         # Moves forward and wraps to 0 if at the end
@@ -248,16 +262,11 @@ class ImageLoader(QMainWindow):
     def update_display(self):
         # Centralized logic to refresh the image label
         path = self.images[self.current_index]
-        labeled_image = self.labeler.label_image(path)
-        color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+        labeled_path = self.labeler.label_image(path)
+        color_correction = cv2.cvtColor(labeled_path,cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(color_correction)
         pixmap = QPixmap.fromImage(pil_image.toqimage())
-        scaled_pixmap = pixmap.scaled(
-            1000,
-            700,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
+        scaled_pixmap = pixmap.scaled(1000, 700, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         self.image_label.setPixmap(scaled_pixmap)
         self.image_list.setCurrentRow(self.current_index)
@@ -294,9 +303,9 @@ class ImageLoader(QMainWindow):
             item = self.image_list.item(row)
 
             filename = item.text().lower()
-            full_path = item.data(Qt.ItemDataRole.UserRole).lower()
+            #ull_path = item.data(Qt.UserRole).lower()
 
-            match = text in filename or text in full_path
+            match = text in filename
             item.setHidden(not match)
 
     def menu_window(self):
