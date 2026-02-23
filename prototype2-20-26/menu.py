@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
-from image_viewer import ImageLoader
-
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
+
+from image_viewer import ImageLoader
 from nav_bar import NavBar
 
 class MenuWindow(QMainWindow):
@@ -9,11 +10,24 @@ class MenuWindow(QMainWindow):
         super().__init__()
         # ADD container
         self.drive = drive
-        self.setGeometry(100, 100, 400, 100)
+        #self.setGeometry(100, 100, 400, 100)
+        self.setGeometry(
+            QGuiApplication.primaryScreen().availableGeometry().center().x() - self.width() // 2,
+            QGuiApplication.primaryScreen().availableGeometry().center().y() - self.height() // 2,
+            self.width(),
+            self.height()
+        )
+
+        self.resize(600, 200)
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
         self.nav_bar = NavBar(self)
+        self.nav_bar.set_button_visibility(
+            home=False,
+            update_labels=False,
+            new_folder=False
+        )
 
         # central widget
         central_widget = QWidget(self)

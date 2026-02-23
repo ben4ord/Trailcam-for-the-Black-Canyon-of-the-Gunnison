@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 from PIL import Image
+import cv2
+
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -15,11 +17,10 @@ from PySide6.QtWidgets import (
     QAbstractItemView
 )
 
-import qtawesome as qta
-
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
-import cv2
+from PySide6.QtGui import QGuiApplication
+
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
 
@@ -33,6 +34,12 @@ class ImageLoader(QMainWindow):
         self.labeler = ImageLabeler()
 
         self.setGeometry(100, 100, 600, 400) # Made it slightly larger to fit an image
+        self.setGeometry(
+            QGuiApplication.primaryScreen().availableGeometry().center().x() - self.width() // 2,
+            QGuiApplication.primaryScreen().availableGeometry().center().y() - self.height() // 2,
+            self.width(),
+            self.height()
+        )
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
         self.nav_bar = NavBar(self)

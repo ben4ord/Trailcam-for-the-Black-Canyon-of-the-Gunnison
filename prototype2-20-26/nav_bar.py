@@ -1,5 +1,6 @@
-from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal
+
 import qtawesome as qta
 
 
@@ -19,11 +20,7 @@ class NavBar(QWidget):
         self.setObjectName("navBar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
-        self.setAutoFillBackground(True)
-
-        palette = self.palette()
-        palette.setColor(self.backgroundRole(), Qt.GlobalColor.transparent)
-        self.setPalette(palette)
+        self.setFixedHeight(35)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
@@ -72,8 +69,6 @@ class NavBar(QWidget):
 
         self.installEventFilter(self)
 
-        self.style().unpolish(self)
-        self.style().polish(self)
         self.update()
 
 
@@ -104,7 +99,42 @@ class NavBar(QWidget):
                 return True
 
             if event.type() == QEvent.Type.MouseMove and self._drag_active:
-                self.parent_window.move(event.globalPosition().toPoint() - self._drag_position)
+                global_pos = event.globalPosition().toPoint()
+
+                if self.parent_window.isMaximized() or self.parent_window.isFullScreen():
+
+                    normal_rect = self.parent_window.normalGeometry()
+
+                    target_width = normal_rect.width() if normal_rect.width() > 0 else self.parent_window.width()
+
+                    self.parent_window.showNormal()
+
+                    press_ratio_x = self._press_pos.x() / max(1, self.width())
+
+                    anchor_x = int(press_ratio_x * target_width)
+                    anchor_x = max(0, min(anchor_x, max(0, target_width - 1)))
+
+                    anchor_y = max(
+                        0,
+                        min(
+                            self._press_pos.y(),
+                            max(0, self.height() - 1)
+                        )
+                    )
+
+                    self.parent_window.move(
+                        global_pos.x() - anchor_x,
+                        global_pos.y() - anchor_y
+                    )
+
+                    self._drag_position = global_pos - self.parent_window.frameGeometry().topLeft()
+
+                    self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
+                    self.max_btn.setToolTip("Maximize")
+
+                    return True
+
+                self.parent_window.move(global_pos - self._drag_position)
                 return True
 
             if event.type() == QEvent.Type.MouseButtonRelease:
@@ -112,3 +142,8 @@ class NavBar(QWidget):
                 return True
 
         return super().eventFilter(obj, event)
+    
+    def set_button_visibility(self, home=True, update_labels=True, new_folder=True):
+        self.home_btn.setVisible(home)
+        self.update_labels_btn.setVisible(update_labels)
+        self.new_folder_btn.setVisible(new_folder)

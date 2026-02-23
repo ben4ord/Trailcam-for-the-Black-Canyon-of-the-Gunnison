@@ -3,32 +3,43 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QApplication,
-    QWidget,
+    QMainWindow,
     QGridLayout,
     QPushButton,
     QLineEdit,
     QLabel,
     QFileDialog,
+    QWidget
 )
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 
 from menu import MenuWindow
 from nav_bar import NavBar
 
-class MainWindow(QWidget):
+class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.setGeometry(100, 100, 400, 100)
+        self.resize(600, 200)
+
+        central = QWidget()
+        central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        self.setCentralWidget(central)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
         self.nav_bar = NavBar(self)
+        self.nav_bar.set_button_visibility(
+            home=False,
+            update_labels=False,
+            new_folder=False
+        )
 
-        layout = QGridLayout()
+        layout = QGridLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        self.setLayout(layout)
 
         # directory selection
         dir_btn = QPushButton('Browse')
@@ -40,13 +51,14 @@ class MainWindow(QWidget):
         # Add button to next window
         secondaryWindowButton = QPushButton('Next')
         secondaryWindowButton.clicked.connect(self.next_window)
-        layout.addWidget(secondaryWindowButton, 1, 0)
+        layout.addWidget(secondaryWindowButton, 1, 0, 1, 1)
 
         layout.addWidget(QLabel('Directory:'), 2, 0)
-        layout.addWidget(self.dir_name_edit, 2, 1)
-        layout.addWidget(dir_btn, 2, 2)
+        layout.addWidget(self.dir_name_edit, 2, 1, 1, 4)
+        layout.addWidget(dir_btn, 2, 5)
 
         self.show()
+        self.center_window()
 
     def open_dir_dialog(self):
         dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
@@ -62,6 +74,15 @@ class MainWindow(QWidget):
         self.nextWindow = MenuWindow(self.dir_name_edit.text())
         self.nextWindow.show()
         self.close()
+
+    def center_window(self):
+        screen = QGuiApplication.primaryScreen().availableGeometry()
+        window_geometry = self.frameGeometry()
+
+        self.move(
+            screen.center().x() - window_geometry.width() // 2,
+            screen.center().y() - window_geometry.height() // 2
+        )
 
 
 if __name__ == '__main__':
