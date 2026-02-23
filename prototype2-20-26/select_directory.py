@@ -23,12 +23,13 @@ class MainWindow(QMainWindow):
         super().__init__(*args, **kwargs)
 
         self.resize(600, 200)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        self.setContentsMargins(0, 0, 0, 0)
 
         central = QWidget()
         central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         self.setCentralWidget(central)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
             update_labels=False,
             new_folder=False
         )
+        self.setMenuWidget(self.nav_bar)
 
         layout = QGridLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -46,16 +48,14 @@ class MainWindow(QMainWindow):
         dir_btn.clicked.connect(self.open_dir_dialog)
         self.dir_name_edit = QLineEdit()
 
-        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
-
         # Add button to next window
         secondaryWindowButton = QPushButton('Next')
         secondaryWindowButton.clicked.connect(self.next_window)
-        layout.addWidget(secondaryWindowButton, 1, 0, 1, 1)
+        layout.addWidget(secondaryWindowButton, 0, 0, 1, 1)
 
-        layout.addWidget(QLabel('Directory:'), 2, 0)
-        layout.addWidget(self.dir_name_edit, 2, 1, 1, 4)
-        layout.addWidget(dir_btn, 2, 5)
+        layout.addWidget(QLabel('Directory:'), 1, 0)
+        layout.addWidget(self.dir_name_edit, 1, 1, 1, 4)
+        layout.addWidget(dir_btn, 1, 5)
 
         self.show()
         self.center_window()
