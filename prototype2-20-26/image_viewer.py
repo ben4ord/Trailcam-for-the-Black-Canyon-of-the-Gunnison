@@ -14,13 +14,14 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
-    QHBoxLayout
+    QHBoxLayout,
+    QMessageBox
 )
 
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
-
+import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
 
@@ -29,7 +30,8 @@ class ImageLoader(QMainWindow):
         super().__init__()
         
         self.drive = drive
-        self.images = self.get_imgs(self.drive)
+        self.images = []
+        self.get_imgs(self.drive)
         self.current_index = 0 # Track which image we are on
         self.labeler = ImageLabeler()
 
@@ -64,6 +66,14 @@ class ImageLoader(QMainWindow):
         self.search_box.setPlaceholderText("Search images...")
         self.clear_search = QPushButton("❌")
         self.clear_search.clicked.connect(self.clear_search_bar)
+
+        # Creating PushButton for user to delete image.
+        self.delete_button = QPushButton()
+        self.delete_button.setIcon(qta.icon('fa6s.trash'))
+        self.delete_button.setToolTip("Delete Image")
+        # connect to delete function
+        self.delete_button.clicked.connect(self.delete_image)
+
         # If images exist, load the first one into the label
         if self.images:
             self.update_display()
@@ -73,48 +83,78 @@ class ImageLoader(QMainWindow):
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
 
-
-
         # Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
         layout.setColumnStretch(3, 1)   # horizontal spacer
         layout.setRowStretch(2, 1)      # main content grows
 
         # nav bar
-        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
+        layout.addWidget(self.nav_bar, 0, 0, 1, 7)
 
         # top row
-        layout.addWidget(self.search_box, 1, 4)
-        layout.addWidget(self.clear_search, 1, 5)
+        layout.addWidget(self.search_box, 1, 5)
+        layout.addWidget(self.clear_search, 1, 6)
 
         # image area
-        layout.addWidget(self.image_label, 2, 0, 1, 3)
-        layout.addWidget(self.previousImage, 3, 0)
-        layout.addWidget(self.nextImage, 3, 2)
+        layout.addWidget(self.previousImage, 4, 0)
+        layout.addWidget(self.image_label, 2, 1, 1, 3)
+        layout.addWidget(self.nextImage, 4, 4,1,1)
+
+        # Verification Buttons
+        layout.addWidget(self.delete_button,3,1)
 
         # right panel image list
-        layout.addWidget(self.image_list, 2, 4, 2, 2)
+        layout.addWidget(self.image_list, 2, 5, 2, 2)
 
         # connect the signal for when user clicks image path
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         # Connect to search function
         self.search_box.textChanged.connect(self.filter_list)
+       
+        # highlight first image in image list
+        self.load_image_list()
+        self.image_list.setCurrentRow(self.current_index)
 
+        self.show()
+
+    def load_image_list(self):
         # Load in list of images 
         for image in self.images:
             item = QListWidgetItem(Path(image).name)   # show only filename
             item.setData(Qt.UserRole, image)           # store full path internally
             self.image_list.addItem(item)
-            #print(image)
-       
-        # highlight first image in image list
-        self.image_list.setCurrentRow(self.current_index)
+            #print(image)   
 
-        self.show()
+    def delete_image(self):
+        if not self.images:
+          return
 
-    
+        file_path = self.images[self.current_index]
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        self.get_imgs(self.drive, True)
+        self.image_list.takeItem(self.current_index)
+
+        if self.images:
+            self.current_index = min(self.current_index, len(self.images) - 1)
+            self.update_display()
+        else:
+            self.current_index = -1
+            self.show_no_images_popup()
+
+    def show_no_images_popup(self):
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("No Images")
+        msg.setText("This folder contains no images.\n Select a new working directory.")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
+        print(self.current_index)
         self.update_display()
     
     def clear_search_bar(self):
@@ -122,7 +162,6 @@ class ImageLoader(QMainWindow):
         item = self.image_list.item(self.current_index)
         self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
         
-
     def next_image(self):
         # Moves forward and wraps to 0 if at the end
         self.current_index = (self.current_index + 1) % len(self.images)
@@ -163,7 +202,13 @@ class ImageLoader(QMainWindow):
                     if not filename.startswith('.'): 
                         img_path = os.path.join(drive, filename)   
                         imgs.append(img_path)
-        return imgs
+
+        self.images = imgs
+        if not imgs:
+            self.show_no_images_popup()
+            return
+
+        return 
     
     def open_dir_dialog(self):
         dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
@@ -172,8 +217,9 @@ class ImageLoader(QMainWindow):
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
-            self.images = self.get_imgs(self.drive,True)
+            self.get_imgs(self.drive,True)
             self.update_display()
+            self.load_image_list()
 
     def filter_list(self, text):
         text = text.lower()
