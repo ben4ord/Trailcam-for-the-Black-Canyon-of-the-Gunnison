@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
-    QAbstractItemView
+    QHBoxLayout
 )
 
 from PySide6.QtGui import QPixmap
@@ -33,6 +33,7 @@ class ImageLoader(QMainWindow):
         self.current_index = 0 # Track which image we are on
         self.labeler = ImageLabeler()
 
+        self.setWindowTitle('Image Loader')
         self.setGeometry(100, 100, 600, 400) # Made it slightly larger to fit an image
         self.setGeometry(
             QGuiApplication.primaryScreen().availableGeometry().center().x() - self.width() // 2,
@@ -72,6 +73,8 @@ class ImageLoader(QMainWindow):
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
 
+
+
         # Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
         layout.setColumnStretch(3, 1)   # horizontal spacer
@@ -100,7 +103,7 @@ class ImageLoader(QMainWindow):
         # Load in list of images 
         for image in self.images:
             item = QListWidgetItem(Path(image).name)   # show only filename
-            item.setData(Qt.ItemDataRole.UserRole, image)           # store full path internally
+            item.setData(Qt.UserRole, image)           # store full path internally
             self.image_list.addItem(item)
             #print(image)
        
