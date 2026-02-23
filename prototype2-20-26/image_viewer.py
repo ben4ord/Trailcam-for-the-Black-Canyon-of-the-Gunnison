@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QListWidget,
     QListWidgetItem,
-    QHBoxLayout,
     QAbstractItemView,
     QAbstractItemView
 )
@@ -19,9 +18,10 @@ from PySide6.QtWidgets import (
 import qtawesome as qta
 
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, QEvent, QPoint
+from PySide6.QtCore import Qt
 import cv2
 from model_prediction import ImageLabeler
+from nav_bar import NavBar
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -31,95 +31,20 @@ class ImageLoader(QMainWindow):
         self.images = self.get_imgs(self.drive)
         self.current_index = 0 # Track which image we are on
         self.labeler = ImageLabeler()
-        self._drag_active = False
-        self._drag_position = QPoint()
-        self._press_pos = QPoint()
 
         self.setGeometry(100, 100, 600, 400) # Made it slightly larger to fit an image
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+
+        self.nav_bar = NavBar(self)
+        self.nav_bar.homeClicked.connect(self.menu_window)
+        self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
+        self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QGridLayout(central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-
-        # Menu bar buttons
-        # Icons can be found here: https://fontawesome.com/v6/search?ic=free-collection
-        self.home_btn = QPushButton()
-        self.home_btn.setIcon(qta.icon('fa6s.house'))
-        self.home_btn.setToolTip('Home')
-        self.home_btn.clicked.connect(self.menu_window)
-        self.home_btn.setFlat(True)
-
-        self.update_labels_btn = QPushButton()
-        self.update_labels_btn.setIcon(qta.icon('fa6s.file-pen'))
-        self.update_labels_btn.setToolTip('Update Labels')
-        self.update_labels_btn.clicked.connect(self.update_labels_window)
-        self.update_labels_btn.setFlat(True)
-
-        self.new_folder_btn = QPushButton()
-        self.new_folder_btn.setIcon(qta.icon('fa6s.folder'))
-        self.new_folder_btn.setToolTip('Select New Folder')
-        self.new_folder_btn.clicked.connect(self.open_dir_dialog)
-        self.new_folder_btn.setFlat(True)
-
-        self.title_bar = QWidget()
-        self.title_bar.setObjectName("titleBar")
-        self.setStyleSheet("""
-        #titleBar {
-            background-color: #1f2a36;   /* bar color */
-            border-bottom: 1px solid #3b4b5f;
-        }
-        #titleBar QLabel {
-            color: #ffffff;
-            font-weight: 600;
-        }
-        #titleBar QPushButton {
-            background: transparent;
-            color: #ffffff;
-            border: none;
-            padding: 4px 8px;
-        }
-        #titleBar QPushButton:hover {
-            background-color: #2f3e4f;
-        }
-        """)
-
-        title_layout = QHBoxLayout(self.title_bar)
-        title_layout.setContentsMargins(8, 4, 8, 4)
-        title_layout.setSpacing(6)
-
-
-        title_layout.addWidget(self.home_btn)
-        title_layout.addWidget(self.update_labels_btn)
-        title_layout.addWidget(self.new_folder_btn)
-        title_layout.addStretch()
-
-        self.min_btn = QPushButton()
-        self.min_btn.setIcon(qta.icon('fa6s.minus'))
-        self.min_btn.setToolTip('Minimize')
-
-        self.max_btn = QPushButton()
-        self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
-        self.max_btn.setToolTip('Maximize')
-
-        self.close_btn = QPushButton()
-        self.close_btn.setIcon(qta.icon('fa6s.xmark'))
-        self.close_btn.setToolTip('Close')
-
-        self.min_btn.setFixedWidth(36)
-        self.max_btn.setFixedWidth(36)
-        self.close_btn.setFixedWidth(36)
-        self.min_btn.clicked.connect(self.showMinimized)
-        self.max_btn.clicked.connect(self.toggle_max_restore)
-        self.close_btn.clicked.connect(self.close)
-        title_layout.addWidget(self.min_btn)
-        title_layout.addWidget(self.max_btn)
-        title_layout.addWidget(self.close_btn)
-        self.title_bar.installEventFilter(self)
-
 
         # Create a QLabel to hold the image
         self.image_label = QLabel("No images found")
@@ -140,12 +65,13 @@ class ImageLoader(QMainWindow):
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
 
-        # 3. Add widgets to layout
+        # Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
         layout.setColumnStretch(3, 1)   # horizontal spacer
         layout.setRowStretch(2, 1)      # main content grows
 
-        layout.addWidget(self.title_bar, 0, 0, 1, 6)
+        # nav bar
+        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
 
         # top row
         layout.addWidget(self.search_box, 1, 4)
@@ -175,64 +101,6 @@ class ImageLoader(QMainWindow):
         self.image_list.setCurrentRow(self.current_index)
 
         self.show()
-
-    def toggle_max_restore(self):
-        if self.isMaximized():
-            self.showNormal()
-            self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
-            self.max_btn.setToolTip('Maximize')
-        else:
-            self.showMaximized()
-            self.max_btn.setIcon(qta.icon('fa6s.window-restore'))
-            self.max_btn.setToolTip('Restore')
-
-    def eventFilter(self, obj, event):
-        if obj is self.title_bar:
-            if event.type() == QEvent.Type.MouseButtonDblClick:
-                self.toggle_max_restore()
-                return True
-            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
-                clicked_child = self.title_bar.childAt(event.position().toPoint())
-                if clicked_child in (
-                    self.min_btn,
-                    self.max_btn,
-                    self.close_btn,
-                    self.home_btn,
-                    self.update_labels_btn,
-                    self.new_folder_btn,
-                ):
-                    return False
-                self._drag_active = True
-                self._press_pos = event.position().toPoint()
-                self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-
-                return True
-            if event.type() == QEvent.Type.MouseMove and self._drag_active:
-                global_pos = event.globalPosition().toPoint()
-                if self.isMaximized() or self.isFullScreen():
-                    # Use pre-maximize geometry to avoid transient width values after showNormal().
-                    normal_rect = self.normalGeometry()
-                    target_width = normal_rect.width() if normal_rect.width() > 0 else self.width()
-
-                    self.showNormal()
-                    # Keep cursor anchored to the same relative point on the title bar after restore.
-                    press_ratio_x = self._press_pos.x() / max(1, self.title_bar.width())
-                    anchor_x = int(press_ratio_x * target_width)
-                    anchor_x = max(0, min(anchor_x, max(0, target_width - 1)))
-                    anchor_y = max(0, min(self._press_pos.y(), max(0, self.title_bar.height() - 1)))
-                    self.move(global_pos.x() - anchor_x, global_pos.y() - anchor_y)
-
-                    self._drag_position = global_pos - self.frameGeometry().topLeft()
-                    self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
-                    self.max_btn.setToolTip('Maximize')
-                    return True
-
-                self.move(global_pos - self._drag_position)
-                return True
-            if event.type() == QEvent.Type.MouseButtonRelease:
-                self._drag_active = False
-                return True
-        return super().eventFilter(obj, event)
 
     
     def on_list_item_clicked(self, item):
