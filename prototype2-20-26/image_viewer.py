@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
+import piexif
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -14,7 +15,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
-    QHBoxLayout,
     QMessageBox
 )
 
@@ -24,6 +24,7 @@ from PySide6.QtGui import QGuiApplication
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
+from training_manager import TrainingManager
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -34,6 +35,8 @@ class ImageLoader(QMainWindow):
         self.get_imgs(self.drive)
         self.current_index = 0 # Track which image we are on
         self.labeler = ImageLabeler()
+
+        self.training_manager = TrainingManager(self.drive)
 
         self.setWindowTitle('Image Loader')
         self.setGeometry(100, 100, 600, 400) # Made it slightly larger to fit an image
@@ -55,6 +58,13 @@ class ImageLoader(QMainWindow):
         layout = QGridLayout(central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
+        self.verify_image = QPushButton()
+        self.verify_image.setIcon(qta.icon('fa6s.circle-check'))
+        self.verify_image.setToolTip("Verify Image Label")
+        self.verify_image.clicked.connect(self.mark_verified)
+
+        self.verification_status = QLabel()
 
         # Create a QLabel to hold the image
         self.image_label = QLabel("No images found")
@@ -98,10 +108,12 @@ class ImageLoader(QMainWindow):
         # image area
         layout.addWidget(self.previousImage, 4, 0)
         layout.addWidget(self.image_label, 2, 1, 1, 3)
-        layout.addWidget(self.nextImage, 4, 4,1,1)
+        layout.addWidget(self.nextImage, 4, 4, 1, 1)
 
         # Verification Buttons
-        layout.addWidget(self.delete_button,3,1)
+        layout.addWidget(self.delete_button, 3, 1)
+        layout.addWidget(self.verification_status, 3, 2)
+        layout.addWidget(self.verify_image, 3, 3)
 
         # right panel image list
         layout.addWidget(self.image_list, 2, 5, 2, 2)
@@ -118,6 +130,8 @@ class ImageLoader(QMainWindow):
         self.show()
 
     def load_image_list(self):
+        self.image_list.clear()
+
         # Load in list of images 
         for image in self.images:
             item = QListWidgetItem(Path(image).name)   # show only filename
@@ -188,7 +202,36 @@ class ImageLoader(QMainWindow):
 
         self.image_label.setPixmap(scaled_pixmap)
         self.image_list.setCurrentRow(self.current_index)
-        #print(f"Viewing: {os.path.basename(path)}")
+
+        if self.training_manager.is_verified(path):
+            self.verification_status.setText("✔ Verified")
+            self.verification_status.setStyleSheet("color: green; font-weight: bold;")
+            self.verify_image.setEnabled(False)
+            self.image_label.setStyleSheet("border: 4px solid green;")
+        else:
+            self.verification_status.setText("Not Verified")
+            self.verification_status.setStyleSheet("color: red;")
+            self.verify_image.setEnabled(True)
+            self.image_label.setStyleSheet("")
+
+    
+    def mark_verified(self):
+        if not self.images:
+            return
+
+        source = self.images[self.current_index]
+        new_path = self.training_manager.verify_image(source)
+
+        QMessageBox.information(
+            self,
+            "Verified",
+            f"Copied to:\n{new_path.name}"
+        )
+        self.verification_status.setText("✔ Verified")
+        self.verification_status.setStyleSheet("color: green; font-weight: bold;")
+        self.verify_image.setEnabled(False)
+        self.image_label.setStyleSheet("border: 4px solid green;")
+  
 
     def get_imgs(self, drive, new_dir=False):
         if(new_dir):
@@ -217,9 +260,16 @@ class ImageLoader(QMainWindow):
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
-            self.get_imgs(self.drive,True)
-            self.update_display()
+            self.get_imgs(self.drive, True)
             self.load_image_list()
+
+            if self.images:
+                self.image_list.setCurrentRow(0)
+                self.update_display()
+            else:
+                self.image_label.setText("No images found")
+
+            self.training_manager = TrainingManager(self.drive)
 
     def filter_list(self, text):
         text = text.lower()

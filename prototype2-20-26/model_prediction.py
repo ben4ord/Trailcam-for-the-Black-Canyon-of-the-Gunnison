@@ -6,7 +6,7 @@ import numpy as np
 
 
 class ImageLabeler:
-    def __init__(self, model_path="yolov8n.pt"):
+    def __init__(self, model_path="best.pt"): #yolov8n.pt
         
         # Detect if running inside PyInstaller bundle
         if hasattr(sys, "_MEIPASS"):
