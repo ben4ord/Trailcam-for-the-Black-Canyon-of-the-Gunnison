@@ -220,12 +220,14 @@ class ImageLoader(QMainWindow):
             return
 
         source = self.images[self.current_index]
-        new_path = self.training_manager.verify_image(source)
+        prediction = self.labeler.predict(source)
+        label_lines = self.labeler.to_yolo_label_lines(prediction)
+        new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
         QMessageBox.information(
             self,
             "Verified",
-            f"Copied to:\n{new_path.name}"
+            f"Copied to:\n{new_path.name}\n\nLabel saved:\n{label_path.name}"
         )
         self.verification_status.setText("✔ Verified")
         self.verification_status.setStyleSheet("color: green; font-weight: bold;")
