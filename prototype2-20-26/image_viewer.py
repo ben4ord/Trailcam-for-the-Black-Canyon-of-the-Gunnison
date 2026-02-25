@@ -84,10 +84,6 @@ class ImageLoader(QMainWindow):
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
 
-        #TODO: remove this later
-        self.labelEditor = QPushButton('Edit Labels')
-        self.labelEditor.clicked.connect(self.open_label_editor)
-
         # 3. Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
         layout.setColumnStretch(3, 1)   # horizontal spacer
@@ -107,9 +103,6 @@ class ImageLoader(QMainWindow):
 
         # Verification Buttons
         layout.addWidget(self.delete_button,3,1)
-
-        #TODO: remove this later, just for testing label editor
-        layout.addWidget(self.labelEditor, 2, 1)
 
         # right panel image list
         layout.addWidget(self.image_list, 2, 5, 2, 2)
@@ -132,14 +125,6 @@ class ImageLoader(QMainWindow):
             item.setData(Qt.UserRole, image)           # store full path internally
             self.image_list.addItem(item)
             #print(image)   
-    
-    #TODO: remove this later, just for testing label editor
-    def open_label_editor(self):
-        if self.images:
-            editor = LabelEditor(self)
-            editor.exec()
-        self.get_imgs(self.drive, True)
-        self.image_list.takeItem(self.current_index)
 
     def delete_image(self):
         if not self.images:
@@ -256,7 +241,7 @@ class ImageLoader(QMainWindow):
         self.close()
 
     def update_labels_window(self):
-        from label_updater import LabelUpdater
-        self.labelUpdateWindow = LabelUpdater(self.drive)
-        self.labelUpdateWindow.show()
-        self.close()
+        if self.images:
+            editor = LabelEditor(self)
+            editor.exec()
+
