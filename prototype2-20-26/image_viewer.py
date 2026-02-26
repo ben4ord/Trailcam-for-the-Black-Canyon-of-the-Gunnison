@@ -281,13 +281,18 @@ class ImageLoader(QMainWindow):
         if not self.images:
             return
         
+        source = self.images[self.current_index]
+        
+        # Return is the image is already verified (doesn't allow a second 'Enter' keypress)
+        if self.training_manager.is_verified(source):
+            return
+        
         if not self._confirm_action(
             "Confirm Verification",
             "Verify this image?"
         ):
             return
-
-        source = self.images[self.current_index]
+    
         prediction = self.labeler.predict(source)
         label_lines = self.labeler.to_yolo_label_lines(prediction)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
