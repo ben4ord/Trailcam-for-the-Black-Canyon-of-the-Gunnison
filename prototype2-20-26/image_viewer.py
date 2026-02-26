@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
-import piexif
 
 from PySide6.QtWidgets import (
     QWidget,

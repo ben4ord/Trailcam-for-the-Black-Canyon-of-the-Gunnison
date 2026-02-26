@@ -6,7 +6,7 @@ class TrainingManager:
     def __init__(self, root_drive):
         self.root_drive = Path(root_drive)
         # Centralized training set location beside this module.
-        self.train_root = Path(__file__).resolve().parent / "train"
+        self.train_root = Path(__file__).resolve().parent / "dataset"
         self.images_dir = self.train_root / "images"
         self.labels_dir = self.train_root / "labels"
 
