@@ -24,6 +24,7 @@ import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
 from training_manager import TrainingManager
+from label_editor import LabelEditor
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -96,7 +97,7 @@ class ImageLoader(QMainWindow):
         self.nextImage.setShortcut(Qt.Key.Key_Right)
         self.previousImage.setShortcut(Qt.Key.Key_Left)
 
-        # Add widgets to layout
+        # 3. Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
         layout.setColumnStretch(3, 1)   # horizontal spacer
         layout.setRowStretch(2, 1)      # main content grows
@@ -295,7 +296,7 @@ class ImageLoader(QMainWindow):
         self.close()
 
     def update_labels_window(self):
-        from label_updater import LabelUpdater
-        self.labelUpdateWindow = LabelUpdater(self.drive)
-        self.labelUpdateWindow.show()
-        self.close()
+        if self.images:
+            editor = LabelEditor(self)
+            editor.exec()
+
