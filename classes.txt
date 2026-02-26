@@ -1,41 +1,24 @@
 bighorn sheep
-bird unspecified
+bird
 black bear
 bobcat
-canis familiaris (dog)
-canis latrans (coyote)
-cervus canadensis (elk)
-chipmunk
-class aves (birds)
 coyote
-domestic cow
-domestic dog
+cow
+dog
 elk
-family leporidae (hares)
-family mephitidae (skunks)
-family mustelidae (mustelids)
-family sciuridae (squirrels)
-genus marmota (marmots)
-genus tamias (chipmunks)
+chipmunk
+hare
+marmot
 horse
-lagomorph
-lynx rufus (bobcat)
-meleagris gallopavo (common turkey)
-mule deer
-odocoileus hemionus (mule deer)
-odocoileus virginianus (white-tailed deer)
-order rodentia (rodents)
-ovis canadensis (bighorn sheep)
+deer
+rodent
+turkey
 person
-puma concolor (cougar)
+cougar
 raccoon
 red fox
-rodent
 skunk
 squirrel
-taxidea taxus (american badger)
-turkey
+badger
 unidentified animal
-ursus americanus (american black bear)
 vehicle
-vulpes vulpes (red fox)
