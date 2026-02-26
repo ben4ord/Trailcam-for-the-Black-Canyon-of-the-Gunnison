@@ -19,6 +19,6 @@ raccoon
 red fox
 skunk
 squirrel
-badger
+mustelid
 unidentified animal
 vehicle

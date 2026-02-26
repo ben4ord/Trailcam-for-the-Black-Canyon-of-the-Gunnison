@@ -14,10 +14,11 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
-    QMessageBox
+    QMessageBox,
+    QCheckBox
 )
 
-from PySide6.QtGui import QPixmap, QKeySequence,QKeyEvent
+from PySide6.QtGui import QPixmap, QShortcut
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 import qtawesome as qta
@@ -29,6 +30,10 @@ from label_editor import LabelEditor
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
         super().__init__()
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.activateWindow()
+        self.setFocus()
         
         self.drive = drive
         self.images = []
@@ -66,6 +71,14 @@ class ImageLoader(QMainWindow):
 
         self.verification_status = QLabel()
 
+        self.unverify_image_btn = QPushButton()
+        self.unverify_image_btn.setIcon(qta.icon('fa6s.circle-xmark'))
+        self.unverify_image_btn.setToolTip("Unverify Image")
+        self.unverify_image_btn.clicked.connect(self.unverify_image)
+
+        self.confirm_toggle = QCheckBox("Enable prompts and popups")
+        self.confirm_toggle.setChecked(True)
+
         # Create a QLabel to hold the image
         self.image_label = QLabel("No images found")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter) # Center the image in the label
@@ -94,8 +107,13 @@ class ImageLoader(QMainWindow):
         self.previousImage.clicked.connect(self.previous_image)
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
-        self.nextImage.setShortcut(Qt.Key.Key_Right)
-        self.previousImage.setShortcut(Qt.Key.Key_Left)
+
+        # Set shortcuts for keyboard presses mapped to functions
+        QShortcut(Qt.Key_Right, self, self.next_image)
+        QShortcut(Qt.Key_Left, self, self.previous_image)
+        QShortcut(Qt.Key_Return, self, self.mark_verified)
+        QShortcut(Qt.Key_Enter, self, self.mark_verified)
+
 
         # 3. Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
@@ -106,6 +124,7 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.nav_bar, 0, 0, 1, 7)
 
         # top row
+        layout.addWidget(self.confirm_toggle, 1, 2)
         layout.addWidget(self.search_box, 1, 5)
         layout.addWidget(self.clear_search, 1, 6)
 
@@ -118,6 +137,7 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.delete_button, 3, 1)
         layout.addWidget(self.verification_status, 3, 2)
         layout.addWidget(self.verify_image, 3, 3)
+        layout.addWidget(self.unverify_image_btn, 3, 4)
 
         # right panel image list
         layout.addWidget(self.image_list, 2, 5, 2, 2)
@@ -133,6 +153,29 @@ class ImageLoader(QMainWindow):
 
         self.show()
 
+    def _confirm_action(self, title, message):
+        if not self.confirm_toggle.isChecked():
+            return True
+
+        reply = QMessageBox.question(
+            self,
+            title,
+            message,
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        return reply == QMessageBox.Yes
+    
+    def _show_info(self, title, message):
+        if not self.confirm_toggle.isChecked():
+            return
+
+        QMessageBox.information(
+            self,
+            title,
+            message
+        )
+
     def load_image_list(self):
         self.image_list.clear()
 
@@ -147,6 +190,12 @@ class ImageLoader(QMainWindow):
         if not self.images:
           return
 
+        if not self._confirm_action(
+            "Confirm Image Deletion?",
+            "Delete this image? (This could take a minute)"
+        ):
+            return
+
         file_path = self.images[self.current_index]
 
         if os.path.exists(file_path):
@@ -154,6 +203,11 @@ class ImageLoader(QMainWindow):
 
         self.get_imgs(self.drive, True)
         self.image_list.takeItem(self.current_index)
+
+        self._show_info(
+            "Image Deleted",
+            f"Deleted from:\n{file_path}\n"
+        )
 
         if self.images:
             self.current_index = min(self.current_index, len(self.images) - 1)
@@ -181,11 +235,15 @@ class ImageLoader(QMainWindow):
         self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
         
     def next_image(self):
+        if not self.images:
+            return
         # Moves forward and wraps to 0 if at the end
         self.current_index = (self.current_index + 1) % len(self.images)
         self.update_display()
 
     def previous_image(self):
+        if not self.images:
+            return
         # Moves backward and wraps to the last index if at 0
         self.current_index = (self.current_index - 1) % len(self.images)
         self.update_display()
@@ -222,14 +280,19 @@ class ImageLoader(QMainWindow):
     def mark_verified(self):
         if not self.images:
             return
+        
+        if not self._confirm_action(
+            "Confirm Verification",
+            "Verify this image?"
+        ):
+            return
 
         source = self.images[self.current_index]
         prediction = self.labeler.predict(source)
         label_lines = self.labeler.to_yolo_label_lines(prediction)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
-        QMessageBox.information(
-            self,
+        self._show_info(
             "Verified",
             f"Copied to:\n{new_path.name}\n\nLabel saved:\n{label_path.name}"
         )
@@ -237,6 +300,32 @@ class ImageLoader(QMainWindow):
         self.verification_status.setStyleSheet("color: green; font-weight: bold;")
         self.verify_image.setEnabled(False)
         self.image_label.setStyleSheet("border: 4px solid green;")
+
+    def unverify_image(self):
+        if not self.images:
+            return
+        
+        if not self._confirm_action(
+            "Confirm Unverify",
+            "Remove verified dataset copy?"
+        ):
+            return
+
+        source = self.images[self.current_index]
+
+        # Delete verified training dataset copy + label file
+        self.training_manager.unverify_image(source)
+
+        self._show_info(
+            "Unverified",
+            "Image removed from training dataset."
+        )
+
+        # Refresh UI state
+        self.verify_image.setEnabled(True)
+        self.verification_status.setText("Not Verified")
+        self.verification_status.setStyleSheet("color: red;")
+        self.image_label.setStyleSheet("")
   
 
     def get_imgs(self, drive, new_dir=False):
