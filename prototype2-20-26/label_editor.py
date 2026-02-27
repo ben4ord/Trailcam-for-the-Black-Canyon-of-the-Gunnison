@@ -20,7 +20,9 @@ from nav_bar import NavBar
 class LabelEditor(QDialog):
     def __init__(self, parent=None):
         super().__init__()
-        self.setWindowTitle("Edit Labels")
+
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        self.setContentsMargins(0, 0, 0, 0)
 
         # window setup
         outer_layout = QVBoxLayout(self)
@@ -32,13 +34,14 @@ class LabelEditor(QDialog):
         # nav bar
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
-            home=False,
+            home=True,
             update_labels=False,
             new_folder=False
         )
 
         outer_layout.addWidget(self.nav_bar)
         outer_layout.addLayout(layout)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
 
         # Left panel
         left_panel = QVBoxLayout()

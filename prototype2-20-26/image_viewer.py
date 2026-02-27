@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox
 )
 
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QKeySequence,QKeyEvent
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 import qtawesome as qta
@@ -65,7 +65,9 @@ class ImageLoader(QMainWindow):
         self.image_list = QListWidget()     
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
-        self.clear_search = QPushButton("❌")
+        self.clear_search = QPushButton()
+        self.clear_search.setIcon(qta.icon("fa6s.x"))
+        self.clear_search.setToolTip("Clear Image Search")
         self.clear_search.clicked.connect(self.clear_search_bar)
 
         # Creating PushButton for user to delete image.
@@ -83,6 +85,8 @@ class ImageLoader(QMainWindow):
         self.previousImage.clicked.connect(self.previous_image)
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
+        self.nextImage.setShortcut(Qt.Key.Key_Right)
+        self.previousImage.setShortcut(Qt.Key.Key_Left)
 
         # 3. Add widgets to layout
         # (Row, Column, RowSpan, ColumnSpan)
