@@ -15,7 +15,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QAbstractItemView,
     QMessageBox,
-    QCheckBox
+    QCheckBox,
+    QComboBox
 )
 
 from PySide6.QtGui import QPixmap, QShortcut
@@ -34,36 +35,63 @@ class ImageLoader(QMainWindow):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.activateWindow()
         self.setFocus()
-        
-        self.drive = drive
-        self.images = []
-        self.get_imgs(self.drive)
-        self.current_index = 0 # Track which image we are on
-        self.labeler = ImageLabeler()
 
+        # -----------------------------
+        # Dataset state
+        # -----------------------------
+        self.images = []
+        self.filtered_images = []
+
+        self.drive = drive
+
+        # Load dataset BEFORE UI filtering
+        self.get_imgs(self.drive, new_dir=True)
+
+        self.current_index = 0
+        self.filter_mode = "all"
+
+        # -----------------------------
+        # Model / backend logic
+        # -----------------------------
+        self.labeler = ImageLabeler()
         self.training_manager = TrainingManager(self.drive)
 
+        # -----------------------------
+        # Window setup
+        # -----------------------------
         self.setWindowTitle('Image Loader')
-        self.setGeometry(100, 100, 600, 400) # Made it slightly larger to fit an image
+        self.setGeometry(100, 100, 600, 400)
+
         self.setGeometry(
             QGuiApplication.primaryScreen().availableGeometry().center().x() - self.width() // 2,
             QGuiApplication.primaryScreen().availableGeometry().center().y() - self.height() // 2,
             self.width(),
             self.height()
         )
+
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
+        # -----------------------------
+        # Central widget + layout
+        # -----------------------------
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        layout = QGridLayout(central_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # -----------------------------
+        # Navbar
+        # -----------------------------
         self.nav_bar = NavBar(self)
         self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QGridLayout(central_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
+        # -----------------------------
+        # Controls
+        # -----------------------------
         self.verify_image = QPushButton()
         self.verify_image.setIcon(qta.icon('fa6s.circle-check'))
         self.verify_image.setToolTip("Verify Image Label")
@@ -79,77 +107,87 @@ class ImageLoader(QMainWindow):
         self.confirm_toggle = QCheckBox("Enable prompts and popups")
         self.confirm_toggle.setChecked(True)
 
-        # Create a QLabel to hold the image
-        self.image_label = QLabel("No images found")
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter) # Center the image in the label
+        # Filter dropdown
+        self.filter_dropdown = QComboBox()
+        self.filter_dropdown.addItems([
+            "All Images",
+            "Verified Only",
+            "Unverified Only"
+        ])
+        self.filter_dropdown.currentIndexChanged.connect(
+            self.on_image_filter_changed
+        )
 
-        # Create QListWidget allowing user to click image and search for image
-        self.image_list = QListWidget()     
+
+        # -----------------------------
+        # Image display
+        # -----------------------------
+        self.image_label = QLabel("No images found")
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.image_list = QListWidget()
+
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
+
         self.clear_search = QPushButton()
         self.clear_search.setIcon(qta.icon("fa6s.x"))
         self.clear_search.setToolTip("Clear Image Search")
         self.clear_search.clicked.connect(self.clear_search_bar)
 
-        # Creating PushButton for user to delete image.
         self.delete_button = QPushButton()
         self.delete_button.setIcon(qta.icon('fa6s.trash'))
         self.delete_button.setToolTip("Delete Image")
-        # connect to delete function
         self.delete_button.clicked.connect(self.delete_image)
 
-        # If images exist, load the first one into the label
-        if self.images:
-            self.update_display()
-
+        # Navigation
         self.previousImage = QPushButton('<- Previous')
         self.previousImage.clicked.connect(self.previous_image)
+
         self.nextImage = QPushButton('Next ->')
         self.nextImage.clicked.connect(self.next_image)
 
-        # Set shortcuts for keyboard presses mapped to functions
+        # Keyboard shortcuts
         QShortcut(Qt.Key_Right, self, self.next_image)
         QShortcut(Qt.Key_Left, self, self.previous_image)
         QShortcut(Qt.Key_Return, self, self.mark_verified)
         QShortcut(Qt.Key_Enter, self, self.mark_verified)
 
+        # -----------------------------
+        # Layout placement
+        # -----------------------------
+        layout.setColumnStretch(3, 1)
+        layout.setRowStretch(2, 1)
 
-        # 3. Add widgets to layout
-        # (Row, Column, RowSpan, ColumnSpan)
-        layout.setColumnStretch(3, 1)   # horizontal spacer
-        layout.setRowStretch(2, 1)      # main content grows
-
-        # nav bar
         layout.addWidget(self.nav_bar, 0, 0, 1, 7)
 
-        # top row
+        layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
         layout.addWidget(self.confirm_toggle, 1, 2)
         layout.addWidget(self.search_box, 1, 5)
         layout.addWidget(self.clear_search, 1, 6)
 
-        # image area
         layout.addWidget(self.previousImage, 4, 0)
         layout.addWidget(self.image_label, 2, 1, 1, 3)
         layout.addWidget(self.nextImage, 4, 4, 1, 1)
 
-        # Verification Buttons
         layout.addWidget(self.delete_button, 3, 1)
         layout.addWidget(self.verification_status, 3, 2)
         layout.addWidget(self.verify_image, 3, 3)
         layout.addWidget(self.unverify_image_btn, 3, 4)
 
-        # right panel image list
         layout.addWidget(self.image_list, 2, 5, 2, 2)
 
-        # connect the signal for when user clicks image path
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
-        # Connect to search function
         self.search_box.textChanged.connect(self.filter_list)
-       
-        # highlight first image in image list
+
+        # Final dataset initialization after widgets exist
+        self.apply_filter("all")
+
         self.load_image_list()
-        self.image_list.setCurrentRow(self.current_index)
+
+        if self.filtered_images:
+            self.image_list.setCurrentRow(self.current_index)
+            self.update_display()
 
         self.show()
 
@@ -179,12 +217,10 @@ class ImageLoader(QMainWindow):
     def load_image_list(self):
         self.image_list.clear()
 
-        # Load in list of images 
-        for image in self.images:
-            item = QListWidgetItem(Path(image).name)   # show only filename
-            item.setData(Qt.UserRole, image)           # store full path internally
-            self.image_list.addItem(item)
-            #print(image)   
+        for image in self.filtered_images:
+            item = QListWidgetItem(Path(image).name)
+            item.setData(Qt.UserRole, image)
+            self.image_list.addItem(item)   
 
     def delete_image(self):
         if not self.images:
@@ -196,7 +232,7 @@ class ImageLoader(QMainWindow):
         ):
             return
 
-        file_path = self.images[self.current_index]
+        file_path = self.filtered_images[self.current_index]
 
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -235,22 +271,25 @@ class ImageLoader(QMainWindow):
         self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
         
     def next_image(self):
-        if not self.images:
+        if not self.filtered_images:
             return
-        # Moves forward and wraps to 0 if at the end
-        self.current_index = (self.current_index + 1) % len(self.images)
+
+        self.current_index = (self.current_index + 1) % len(self.filtered_images)
         self.update_display()
 
     def previous_image(self):
-        if not self.images:
+        if not self.filtered_images:
             return
-        # Moves backward and wraps to the last index if at 0
-        self.current_index = (self.current_index - 1) % len(self.images)
+
+        self.current_index = (self.current_index - 1) % len(self.filtered_images)
         self.update_display()
 
     def update_display(self):
         # Centralized logic to refresh the image label
-        path = self.images[self.current_index]
+        if not self.filtered_images:
+            return
+
+        path = self.filtered_images[self.current_index]
         labeled_image = self.labeler.label_image(path)
         color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(color_correction)
@@ -263,9 +302,11 @@ class ImageLoader(QMainWindow):
         )
 
         self.image_label.setPixmap(scaled_pixmap)
-        self.image_list.setCurrentRow(self.current_index)
+        
+        if self.current_index < self.image_list.count():
+            self.image_list.setCurrentRow(self.current_index)
 
-        if self.training_manager.is_verified(path):
+        if self.training_manager.is_verified_cached(path):
             self.verification_status.setText("✔ Verified")
             self.verification_status.setStyleSheet("color: green; font-weight: bold;")
             self.verify_image.setEnabled(False)
@@ -278,13 +319,13 @@ class ImageLoader(QMainWindow):
 
     
     def mark_verified(self):
-        if not self.images:
+        if not self.filtered_images:
             return
         
-        source = self.images[self.current_index]
+        source = self.filtered_images[self.current_index]
         
         # Return is the image is already verified (doesn't allow a second 'Enter' keypress)
-        if self.training_manager.is_verified(source):
+        if self.training_manager.is_verified_cached(source):
             return
         
         if not self._confirm_action(
@@ -307,7 +348,7 @@ class ImageLoader(QMainWindow):
         self.image_label.setStyleSheet("border: 4px solid green;")
 
     def unverify_image(self):
-        if not self.images:
+        if not self.filtered_images:
             return
         
         if not self._confirm_action(
@@ -316,7 +357,7 @@ class ImageLoader(QMainWindow):
         ):
             return
 
-        source = self.images[self.current_index]
+        source = self.filtered_images[self.current_index]
 
         # Delete verified training dataset copy + label file
         self.training_manager.unverify_image(source)
@@ -347,6 +388,7 @@ class ImageLoader(QMainWindow):
                         imgs.append(img_path)
 
         self.images = imgs
+        self.filtered_images = list(imgs)
         if not imgs:
             self.show_no_images_popup()
             return
@@ -370,6 +412,7 @@ class ImageLoader(QMainWindow):
                 self.image_label.setText("No images found")
 
             self.training_manager = TrainingManager(self.drive)
+            self.training_manager._build_cache()
 
     def filter_list(self, text):
         text = text.lower()
@@ -394,3 +437,38 @@ class ImageLoader(QMainWindow):
             editor = LabelEditor(self)
             editor.exec()
 
+    def on_image_filter_changed(self, index):
+        # Map dropdown index to filter mode
+        if index == 0:
+            mode = "all"
+        elif index == 1:
+            mode = "verified"
+        else:
+            mode = "unverified"
+
+        self.apply_filter(mode)
+
+    def apply_filter(self, mode):
+        self.filter_mode = mode
+
+        if mode == "all":
+            self.filtered_images = list(self.images)
+        elif mode == "verified":
+            self.filtered_images = [
+                img for img in self.images
+                if self.training_manager.is_verified_cached(img)
+            ]
+        elif mode == "unverified":
+            self.filtered_images = [
+                img for img in self.images
+                if not self.training_manager.is_verified_cached(img)
+            ]
+
+        self.current_index = 0
+
+        self.load_image_list()
+
+        if self.filtered_images:
+            self.update_display()
+        else:
+            self.image_label.setText("No images match filter")

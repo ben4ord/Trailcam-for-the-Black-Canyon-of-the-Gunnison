@@ -15,6 +15,9 @@ class TrainingManager:
         self.images_dir.mkdir(parents=True, exist_ok=True)
         self.labels_dir.mkdir(parents=True, exist_ok=True)
 
+        self._verified_cache = set()
+        self._refresh_verified_cache()
+
     # ============================
     # UTILITIES
     # ============================
@@ -24,39 +27,42 @@ class TrainingManager:
 
     def _is_camera_folder(self, name: str) -> bool:
         return "-" in name and len(name) <= 5
+    
+    def _refresh_verified_cache(self):
+        self._verified_cache = {
+            p.name for p in self.images_dir.glob("*")
+        }
+    
+    def _build_cache(self):
+        self._verified_cache.clear()
+
+        if not self.images_dir.exists():
+            return
+
+        for img in self.images_dir.iterdir():
+            if img.is_file():
+                self._verified_cache.add(img.name)
 
     # ============================
     # CORE PATH PARSING
     # ============================
 
     def _build_full_path_name(self, source_path: Path) -> str:
-        """
-        Build filename containing full path from camera folder to image.
-
-        Layout example:
-        Camera -> CheckFolder -> Subfolders(optional) -> Image
-        """
+        source_path = Path(source_path).resolve()
 
         parts = []
 
-        # Walk ancestors upward from image
         for ancestor in source_path.parents:
             parts.append(ancestor.name)
 
-            # Stop when reaching camera folder
             if self._is_camera_folder(ancestor.name):
                 break
 
         parts.reverse()
 
-        # Remove empty components and sanitize
         parts = [self._sanitize(p) for p in parts if p]
 
-        image_stem = source_path.stem
-
-        full_name = "_".join(parts + [image_stem])
-
-        return full_name + source_path.suffix
+        return "_".join(parts + [source_path.stem]) + source_path.suffix
 
     # ============================
     # PUBLIC API
@@ -76,6 +82,8 @@ class TrainingManager:
 
         shutil.copy2(source_path, destination)
 
+        self._verified_cache.add(destination.name)
+
         label_path = self.labels_dir / f"{destination.stem}.txt"
 
         lines = label_lines or []
@@ -86,17 +94,19 @@ class TrainingManager:
 
         label_path.write_text(label_content, encoding="utf-8")
 
+        self._refresh_verified_cache()
+
         return destination, label_path
 
-    def is_verified(self, source_path):
+    
+    def is_verified_cached(self, source_path):
         source_path = Path(source_path)
-
         filename = self._build_full_path_name(source_path)
 
         image_path = self.images_dir / filename
         label_path = self.labels_dir / f"{Path(filename).stem}.txt"
 
-        return image_path.exists() and label_path.exists()
+        return filename in self._verified_cache
 
     def unverify_image(self, source_path):
         source_path = Path(source_path)
@@ -114,3 +124,7 @@ class TrainingManager:
         if label_path.exists():
             label_path.unlink()
             print(f"Deleted label: {label_path}")
+
+        self._verified_cache.discard(training_image_path.name)
+
+        self._refresh_verified_cache()
