@@ -24,7 +24,9 @@ class LabelEditor(QDialog):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setContentsMargins(0, 0, 0, 0)
 
-        # window setup
+        # -----------------------------
+        # Window Setup
+        # -----------------------------
         outer_layout = QVBoxLayout(self)
         self.setLayout(outer_layout)
         layout = QHBoxLayout()
@@ -43,7 +45,9 @@ class LabelEditor(QDialog):
         outer_layout.addLayout(layout)
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Left panel
+        # -----------------------------
+        # Left Panel
+        # -----------------------------
         left_panel = QVBoxLayout()
         self.label_list = QListWidget()
         self.search_box = QLineEdit()
@@ -52,7 +56,9 @@ class LabelEditor(QDialog):
         left_panel.addWidget(self.search_box)
         left_panel.addWidget(self.label_list)
 
-        # Right panel - top bar
+        # -----------------------------
+        # Right Panel
+        # -----------------------------
         right_panel = QVBoxLayout()
         top_bar = QHBoxLayout()
 
@@ -132,6 +138,10 @@ class LabelEditor(QDialog):
         right_panel.addLayout(top_bar)
         right_panel.addWidget(self.stack, stretch=1)
 
+        # -----------------------------
+        # Add Panels to Main, Connect Buttons
+        # -----------------------------
+
         # Add panels to main layout
         layout.addLayout(left_panel)
         layout.addLayout(right_panel, stretch=1)
@@ -146,6 +156,10 @@ class LabelEditor(QDialog):
         self.edit_button.clicked.connect(self.edit_label)
         self.delete_button.clicked.connect(self.delete_label)
         self.edit_confirm_button.clicked.connect(self.confirm_edit)
+
+    # -----------------------------
+    # Label Functions
+    # -----------------------------
 
     def load_labels(self):
         label_file = "../classes.txt"
@@ -171,6 +185,10 @@ class LabelEditor(QDialog):
         self.new_label_input.clear()
         self.stack.setCurrentIndex(1) #show label input page
 
+    def cancel_input(self):
+        self.label_list.setEnabled(True)
+        self.stack.setCurrentIndex(0) #go back to label viewing
+
     def save_to_txt(self, new_label):
         with open("../classes.txt", "r") as f: #read
             labels = [line.strip() for line in f if line.strip()]
@@ -183,7 +201,6 @@ class LabelEditor(QDialog):
     def save_to_yaml(self, new_label):
         with open("../data.yaml", "r") as f:
             data = f.read()
-
         current_nc = int(data.split("nc: ")[1].split("\n")[0])
 
         # Update nc
@@ -219,10 +236,6 @@ class LabelEditor(QDialog):
 
         self.stack.setCurrentIndex(0) #go back to label viewing
 
-    def cancel_input(self):
-        self.label_list.setEnabled(True)
-        self.stack.setCurrentIndex(0) #go back to label viewing
-
     def edit_label(self):
         current_item = self.label_list.currentItem() #get currently selected label 
         if not current_item:
@@ -244,23 +257,6 @@ class LabelEditor(QDialog):
         self.label_list.setEnabled(True)
         self.stack.setCurrentIndex(0)
 
-    def delete_label(self):
-        current_item = self.label_list.currentItem()
-        if not current_item:
-            return
-        reply = QMessageBox.question(
-            self,
-            "Delete Label",
-            f"Are you sure you want to delete '{current_item.text()}'?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            self.remove_from_txt(current_item.text())
-            self.remove_from_yaml(current_item.text())
-            self.label_list.clear()
-            self.load_labels()
-            self.selected_label.setText("No label selected")
-
     def update_txt(self, old_label, new_label):
         with open("../classes.txt", "r") as f:
             labels = [line.strip() for line in f if line.strip()] #get list of labels from file
@@ -281,6 +277,23 @@ class LabelEditor(QDialog):
         lines[first_line_idx:last_line_idx + 1] = new_name_lines #replace old label lines with new label lines
         with open("../data.yaml", "w") as f: #write
             f.write("\n".join(lines))
+
+    def delete_label(self):
+        current_item = self.label_list.currentItem()
+        if not current_item:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete Label",
+            f"Are you sure you want to delete '{current_item.text()}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.remove_from_txt(current_item.text())
+            self.remove_from_yaml(current_item.text())
+            self.label_list.clear()
+            self.load_labels()
+            self.selected_label.setText("No label selected")
 
     def remove_from_txt(self, label):
         with open("../classes.txt", "r") as f:
