@@ -34,7 +34,7 @@ class LabelEditor(QDialog):
         # nav bar
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
-            home=True,
+            home=False,
             update_labels=False,
             new_folder=False
         )
