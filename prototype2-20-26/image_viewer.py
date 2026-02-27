@@ -16,12 +16,12 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QMessageBox,
     QCheckBox,
-    QComboBox
+    QComboBox,
+    QApplication
 )
 
-from PySide6.QtGui import QPixmap, QShortcut
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
+from PySide6.QtCore import Qt, QSortFilterProxyModel,QStringListModel
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
@@ -41,12 +41,13 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         self.images = []
         self.filtered_images = []
-
+        self.labels = []
         self.drive = drive
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
-
+        self.load_labels()
+        print(self.labels)
         self.current_index = 0
         self.filter_mode = "all"
 
@@ -127,6 +128,19 @@ class ImageLoader(QMainWindow):
 
         self.image_list = QListWidget()
 
+        self.label_dropdown = QComboBox()
+        self.label_dropdown.setEditable(True)
+        self.label_dropdown.setInsertPolicy(QComboBox.NoInsert)
+        self.label_dropdown.setCompleter(None)
+        self.model = QStringListModel(self.labels)
+        self.proxy = QSortFilterProxyModel()
+        self.proxy.setSourceModel(self.model)
+        self.proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
+        self.proxy.setFilterRole(Qt.DisplayRole)
+
+        self.label_dropdown.setModel(self.proxy)
+        self.label_dropdown.lineEdit().textEdited.connect(self.filter_labels)
+
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
 
@@ -158,11 +172,13 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         layout.setColumnStretch(3, 1)
         layout.setRowStretch(2, 1)
-
+        
+        # Nav Bar Row
         layout.addWidget(self.nav_bar, 0, 0, 1, 7)
 
         layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
         layout.addWidget(self.confirm_toggle, 1, 2)
+        layout.addWidget(self.label_dropdown,1,3)
         layout.addWidget(self.search_box, 1, 5)
         layout.addWidget(self.clear_search, 1, 6)
 
@@ -472,3 +488,24 @@ class ImageLoader(QMainWindow):
             self.update_display()
         else:
             self.image_label.setText("No images match filter")
+    
+    def load_labels(self):
+        try:
+            with open("../classes.txt", "r") as file:
+                for line in file:
+                    self.labels.append(line.strip())
+                    print(line)
+        except Exception as e:
+            print(e)
+    
+    def filter_labels(self,text):
+        # Prevent combo from changing selection during filtering
+        self.proxy.setFilterFixedString(text)
+
+        if self.proxy.rowCount() == 0:
+            self.label_dropdown.hidePopup()
+            return
+
+        # Only show popup if it's not already visible
+        if not self.label_dropdown.view().isVisible():
+            self.label_dropdown.showPopup()
