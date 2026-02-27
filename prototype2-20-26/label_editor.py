@@ -148,10 +148,10 @@ class LabelEditor(QDialog):
         label_file = "../classes.txt"
         try:
             with open(label_file, "r") as f:
-                for line in f:
-                    label = line.strip()
-                    if label:
-                        self.label_list.addItem(QListWidgetItem(label))
+                labels = [line.strip() for line in f if line.strip()]
+                sorted_labels = sorted(labels, key=lambda x: x.lower())
+                for label in sorted_labels:
+                    self.label_list.addItem(QListWidgetItem(label))
         except FileNotFoundError:
             self.label_list.addItem(QListWidgetItem("No label file found"))
 
@@ -173,7 +173,6 @@ class LabelEditor(QDialog):
             labels = [line.strip() for line in f if line.strip()]
 
         labels.append(new_label)
-        labels.sort(key=lambda x: x.lower())
 
         with open("../classes.txt", "w") as f:
             f.write("\n".join(labels))
@@ -194,7 +193,6 @@ class LabelEditor(QDialog):
         # Extract just the names into a plain list and insert new label alphabetically
         names = [line.split(": ", 1)[1] for _, line in name_lines]
         names.append(new_label)
-        names.sort(key=lambda x: x.lower())
 
         # Rebuild the names block with correct indices
         new_name_lines = [f"  {i}: {name}" for i, name in enumerate(names)]
@@ -264,7 +262,6 @@ class LabelEditor(QDialog):
         with open("../classes.txt", "r") as f:
             labels = [line.strip() for line in f if line.strip()] #get list of labels from file
         labels = [new_label if l == old_label else l for l in labels] #replace old label with new label, otherwise keep looping through/keep same
-        labels.sort(key=lambda x: x.lower()) #resort alphabetically after edit
         with open("../classes.txt", "w") as f: #write
             f.write("\n".join(labels))
 
@@ -275,7 +272,6 @@ class LabelEditor(QDialog):
         name_lines = [(i, line) for i, line in enumerate(lines) if line.startswith("  ") and ": " in line] #get list of label lines
         names = [line.split(": ", 1)[1] for _, line in name_lines] #get list of labels only
         names = [new_label if n == old_label else n for n in names] #replace old label with new label 
-        names.sort(key=lambda x: x.lower()) #sort alphabetically
         new_name_lines = [f"  {i}: {name}" for i, name in enumerate(names)] #create new label lines
         first_line_idx = name_lines[0][0] #index of first label line
         last_line_idx = name_lines[-1][0] #index of last label line
