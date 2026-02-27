@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QCheckBox,
     QComboBox,
-    QApplication
 )
 
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
@@ -176,23 +175,28 @@ class ImageLoader(QMainWindow):
         # Nav Bar Row
         layout.addWidget(self.nav_bar, 0, 0, 1, 7)
 
+        # First Row
         layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
         layout.addWidget(self.confirm_toggle, 1, 2)
         layout.addWidget(self.label_dropdown,1,3)
         layout.addWidget(self.search_box, 1, 5)
         layout.addWidget(self.clear_search, 1, 6)
 
+        # Image Layout (and next/previous buttons)
         layout.addWidget(self.previousImage, 4, 0)
         layout.addWidget(self.image_label, 2, 1, 1, 3)
         layout.addWidget(self.nextImage, 4, 4, 1, 1)
 
+        # Lower Layout
         layout.addWidget(self.delete_button, 3, 1)
         layout.addWidget(self.verification_status, 3, 2)
         layout.addWidget(self.verify_image, 3, 3)
         layout.addWidget(self.unverify_image_btn, 3, 4)
 
+        # Side panel (image list)
         layout.addWidget(self.image_list, 2, 5, 2, 2)
 
+        # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         self.search_box.textChanged.connect(self.filter_list)
 
@@ -207,6 +211,10 @@ class ImageLoader(QMainWindow):
 
         self.show()
 
+
+    # -----------------------------
+    # Helpful UI Functions
+    # -----------------------------
     def _confirm_action(self, title, message):
         if not self.confirm_toggle.isChecked():
             return True
@@ -230,13 +238,37 @@ class ImageLoader(QMainWindow):
             message
         )
 
+    def show_no_images_popup(self):
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("No Images")
+        msg.setText("This folder contains no images.\n Select a new working directory.")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+
+
+    # -----------------------------
+    # Image handle functions
+    # -----------------------------
     def load_image_list(self):
         self.image_list.clear()
 
         for image in self.filtered_images:
             item = QListWidgetItem(Path(image).name)
             item.setData(Qt.UserRole, image)
-            self.image_list.addItem(item)   
+            self.image_list.addItem(item)
+
+    def filter_list(self, text):
+        text = text.lower()
+
+        for row in range(self.image_list.count()):
+            item = self.image_list.item(row)
+
+            filename = item.text().lower()
+            #full_path = item.data(Qt.UserRole).lower()
+
+            match = text in filename
+            item.setHidden(not match)
 
     def delete_image(self):
         if not self.images:
@@ -268,24 +300,6 @@ class ImageLoader(QMainWindow):
             self.current_index = -1
             self.show_no_images_popup()
 
-    def show_no_images_popup(self):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("No Images")
-        msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
-
-    def on_list_item_clicked(self, item):
-        self.current_index = self.image_list.row(item)
-        print(self.current_index)
-        self.update_display()
-    
-    def clear_search_bar(self):
-        self.search_box.setText('')
-        item = self.image_list.item(self.current_index)
-        self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
-        
     def next_image(self):
         if not self.filtered_images:
             return
@@ -299,6 +313,42 @@ class ImageLoader(QMainWindow):
 
         self.current_index = (self.current_index - 1) % len(self.filtered_images)
         self.update_display()
+
+    def get_imgs(self, drive, new_dir=False):
+        if(new_dir):
+            self.images.clear()
+        imgs = []
+        # print(f"Getting images from {drive}")
+        if os.path.exists(drive):
+            for filename in os.listdir(drive):
+                # Check for image extension AND ensure it doesn't start with '.'
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+                    if not filename.startswith('.'): 
+                        img_path = os.path.join(drive, filename)   
+                        imgs.append(img_path)
+
+        self.images = imgs
+        self.filtered_images = list(imgs)
+        if not imgs:
+            self.show_no_images_popup()
+            return
+
+        return 
+
+
+    # -----------------------------
+    # Button press functions
+    # -----------------------------
+    def on_list_item_clicked(self, item):
+        self.current_index = self.image_list.row(item)
+        print(self.current_index)
+        self.update_display()
+    
+    def clear_search_bar(self):
+        self.search_box.setText('')
+        item = self.image_list.item(self.current_index)
+        self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
+        
 
     def update_display(self):
         # Centralized logic to refresh the image label
@@ -332,7 +382,6 @@ class ImageLoader(QMainWindow):
             self.verification_status.setStyleSheet("color: red;")
             self.verify_image.setEnabled(True)
             self.image_label.setStyleSheet("")
-
     
     def mark_verified(self):
         if not self.filtered_images:
@@ -363,6 +412,8 @@ class ImageLoader(QMainWindow):
         self.verify_image.setEnabled(False)
         self.image_label.setStyleSheet("border: 4px solid green;")
 
+        self.next_image() # automatically scroll to next image (less button clicking)
+
     def unverify_image(self):
         if not self.filtered_images:
             return
@@ -389,28 +440,6 @@ class ImageLoader(QMainWindow):
         self.verification_status.setStyleSheet("color: red;")
         self.image_label.setStyleSheet("")
   
-
-    def get_imgs(self, drive, new_dir=False):
-        if(new_dir):
-            self.images.clear()
-        imgs = []
-        # print(f"Getting images from {drive}")
-        if os.path.exists(drive):
-            for filename in os.listdir(drive):
-                # Check for image extension AND ensure it doesn't start with '.'
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
-                    if not filename.startswith('.'): 
-                        img_path = os.path.join(drive, filename)   
-                        imgs.append(img_path)
-
-        self.images = imgs
-        self.filtered_images = list(imgs)
-        if not imgs:
-            self.show_no_images_popup()
-            return
-
-        return 
-    
     def open_dir_dialog(self):
         dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
         if dir_name:
@@ -418,6 +447,7 @@ class ImageLoader(QMainWindow):
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
+
             self.get_imgs(self.drive, True)
             self.load_image_list()
 
@@ -426,21 +456,9 @@ class ImageLoader(QMainWindow):
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
-
+            
             self.training_manager = TrainingManager(self.drive)
             self.training_manager._build_cache()
-
-    def filter_list(self, text):
-        text = text.lower()
-
-        for row in range(self.image_list.count()):
-            item = self.image_list.item(row)
-
-            filename = item.text().lower()
-            #full_path = item.data(Qt.UserRole).lower()
-
-            match = text in filename
-            item.setHidden(not match)
 
     def menu_window(self):
         from menu import MenuWindow
@@ -453,6 +471,10 @@ class ImageLoader(QMainWindow):
             editor = LabelEditor(self)
             editor.exec()
 
+
+    # -----------------------------
+    # Filtering functions
+    # -----------------------------
     def on_image_filter_changed(self, index):
         # Map dropdown index to filter mode
         if index == 0:
