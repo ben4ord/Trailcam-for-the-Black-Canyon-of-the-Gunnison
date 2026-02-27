@@ -8,7 +8,7 @@ class ImageLabeler:
     def __init__(self, model_path="best.pt"):  # yolov8n.pt
         # Detect if running inside PyInstaller bundle
         if hasattr(sys, "_MEIPASS"):
-            base_path = sys._MEIPASS
+            base_path = sys._MEIPASS # type: ignore
         else:
             base_path = os.path.abspath(".")
 

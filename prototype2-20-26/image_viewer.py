@@ -129,16 +129,16 @@ class ImageLoader(QMainWindow):
 
         self.label_dropdown = QComboBox()
         self.label_dropdown.setEditable(True)
-        self.label_dropdown.setInsertPolicy(QComboBox.NoInsert)
-        self.label_dropdown.setCompleter(None)
+        self.label_dropdown.setInsertPolicy(QComboBox.NoInsert) # type: ignore
+        self.label_dropdown.setCompleter(None) # type: ignore
         self.model = QStringListModel(self.labels)
         self.proxy = QSortFilterProxyModel()
         self.proxy.setSourceModel(self.model)
-        self.proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
-        self.proxy.setFilterRole(Qt.DisplayRole)
+        self.proxy.setFilterCaseSensitivity(Qt.CaseInsensitive) # type: ignore
+        self.proxy.setFilterRole(Qt.DisplayRole) # type: ignore
 
         self.label_dropdown.setModel(self.proxy)
-        self.label_dropdown.lineEdit().textEdited.connect(self.filter_labels)
+        self.label_dropdown.lineEdit().textEdited.connect(self.filter_labels) # type: ignore
 
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
@@ -161,10 +161,10 @@ class ImageLoader(QMainWindow):
         self.nextImage.clicked.connect(self.next_image)
 
         # Keyboard shortcuts
-        QShortcut(Qt.Key_Right, self, self.next_image)
-        QShortcut(Qt.Key_Left, self, self.previous_image)
-        QShortcut(Qt.Key_Return, self, self.mark_verified)
-        QShortcut(Qt.Key_Enter, self, self.mark_verified)
+        QShortcut(Qt.Key_Right, self, self.next_image) # type: ignore
+        QShortcut(Qt.Key_Left, self, self.previous_image) # type: ignore
+        QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
+        QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
 
         # -----------------------------
         # Layout placement
@@ -223,10 +223,10 @@ class ImageLoader(QMainWindow):
             self,
             title,
             message,
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No # type: ignore
         )
 
-        return reply == QMessageBox.Yes
+        return reply == QMessageBox.Yes # type: ignore
     
     def _show_info(self, title, message):
         if not self.confirm_toggle.isChecked():
@@ -240,10 +240,10 @@ class ImageLoader(QMainWindow):
 
     def show_no_images_popup(self):
         msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
+        msg.setIcon(QMessageBox.Information) # type: ignore
         msg.setWindowTitle("No Images")
         msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok)
+        msg.setStandardButtons(QMessageBox.Ok) # type: ignore
         msg.exec()
 
 
@@ -255,7 +255,7 @@ class ImageLoader(QMainWindow):
 
         for image in self.filtered_images:
             item = QListWidgetItem(Path(image).name)
-            item.setData(Qt.UserRole, image)
+            item.setData(Qt.UserRole, image) # type: ignore
             self.image_list.addItem(item)
 
     def filter_list(self, text):
