@@ -176,7 +176,7 @@ class LabelEditor(QDialog):
         self.selected_label.setText(item.text())
 
     def filter_list(self, text):
-        text = text.lower()
+        text = text().lower()
         for row in range(self.label_list.count()):
             item = self.label_list.item(row)
             item.setHidden(text not in item.text().lower())
@@ -189,7 +189,60 @@ class LabelEditor(QDialog):
         self.label_list.setEnabled(True)
         self.stack.setCurrentIndex(0) #go back to label viewing
 
-    def save_to_txt(self, new_label):
+    def confirm_add(self):
+        new_label = self.new_label_input.text().strip()
+        if new_label:
+            self.label_list.addItem(QListWidgetItem(new_label))
+            self._save_to_txt(new_label)
+            self._save_to_yaml(new_label)
+            self.label_list.clear()
+            self.load_labels()
+
+        self.stack.setCurrentIndex(0) #go back to label viewing
+
+    def edit_label(self):
+        current_item = self.label_list.currentItem() #get currently selected label 
+        if not current_item:
+            return
+        self.edit_label_input.setText(current_item.text()) #set edit label page text
+        self.label_list.setEnabled(False) #disable label list to prevent changing incorrect label bug
+        self.stack.setCurrentIndex(2) #show edit page
+
+    def confirm_edit(self):
+        new_text = self.edit_label_input.text().strip() #get text from edit label input
+        current_item = self.label_list.currentItem() #get currently selected label in list (before edit)
+        if new_text and current_item:
+            old_label = current_item.text()
+            self._update_txt(old_label, new_text)
+            self._update_yaml(old_label, new_text)
+            self.label_list.clear()
+            self.load_labels()
+            self.selected_label.setText(new_text)
+        self.label_list.setEnabled(True)
+        self.stack.setCurrentIndex(0)
+
+    def delete_label(self):
+        current_item = self.label_list.currentItem()
+        if not current_item:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete Label",
+            f"Are you sure you want to delete '{current_item.text()}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self._remove_from_txt(current_item.text())
+            self._remove_from_yaml(current_item.text())
+            self.label_list.clear()
+            self.load_labels()
+            self.selected_label.setText("No label selected")
+
+    # -----------------------------
+    # Txt/Yaml File Interaction Functions
+    # -----------------------------
+
+    def _save_to_txt(self, new_label):
         with open("../classes.txt", "r") as f: #read
             labels = [line.strip() for line in f if line.strip()]
 
@@ -198,7 +251,7 @@ class LabelEditor(QDialog):
         with open("../classes.txt", "w") as f:
             f.write("\n".join(labels))
     
-    def save_to_yaml(self, new_label):
+    def _save_to_yaml(self, new_label):
         with open("../data.yaml", "r") as f:
             data = f.read()
         current_nc = int(data.split("nc: ")[1].split("\n")[0])
@@ -225,46 +278,15 @@ class LabelEditor(QDialog):
         with open("../data.yaml", "w") as f:
             f.write("\n".join(lines))
     
-    def confirm_add(self):
-        new_label = self.new_label_input.text().strip()
-        if new_label:
-            self.label_list.addItem(QListWidgetItem(new_label))
-            self.save_to_txt(new_label)
-            self.save_to_yaml(new_label)
-            self.label_list.clear()
-            self.load_labels()
 
-        self.stack.setCurrentIndex(0) #go back to label viewing
-
-    def edit_label(self):
-        current_item = self.label_list.currentItem() #get currently selected label 
-        if not current_item:
-            return
-        self.edit_label_input.setText(current_item.text()) #set edit label page text
-        self.label_list.setEnabled(False) #disable label list to prevent changing incorrect label bug
-        self.stack.setCurrentIndex(2) #show edit page
-
-    def confirm_edit(self):
-        new_text = self.edit_label_input.text().strip() #get text from edit label input
-        current_item = self.label_list.currentItem() #get currently selected label in list (before edit)
-        if new_text and current_item:
-            old_label = current_item.text()
-            self.update_txt(old_label, new_text)
-            self.update_yaml(old_label, new_text)
-            self.label_list.clear()
-            self.load_labels()
-            self.selected_label.setText(new_text)
-        self.label_list.setEnabled(True)
-        self.stack.setCurrentIndex(0)
-
-    def update_txt(self, old_label, new_label):
+    def _update_txt(self, old_label, new_label):
         with open("../classes.txt", "r") as f:
             labels = [line.strip() for line in f if line.strip()] #get list of labels from file
         labels = [new_label if l == old_label else l for l in labels] #replace old label with new label, otherwise keep looping through/keep same
         with open("../classes.txt", "w") as f: #write
             f.write("\n".join(labels))
 
-    def update_yaml(self, old_label, new_label):
+    def _update_yaml(self, old_label, new_label):
         with open("../data.yaml", "r") as f:
             data = f.read()
         lines = data.split("\n") #get lines
@@ -278,24 +300,7 @@ class LabelEditor(QDialog):
         with open("../data.yaml", "w") as f: #write
             f.write("\n".join(lines))
 
-    def delete_label(self):
-        current_item = self.label_list.currentItem()
-        if not current_item:
-            return
-        reply = QMessageBox.question(
-            self,
-            "Delete Label",
-            f"Are you sure you want to delete '{current_item.text()}'?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            self.remove_from_txt(current_item.text())
-            self.remove_from_yaml(current_item.text())
-            self.label_list.clear()
-            self.load_labels()
-            self.selected_label.setText("No label selected")
-
-    def remove_from_txt(self, label):
+    def _remove_from_txt(self, label):
         with open("../classes.txt", "r") as f:
             labels = [line.strip() for line in f if line.strip()] #get list of labels
         filtered_labels = []
@@ -306,7 +311,7 @@ class LabelEditor(QDialog):
         with open("../classes.txt", "w") as f: #write
             f.write("\n".join(labels))
 
-    def remove_from_yaml(self, label):
+    def _remove_from_yaml(self, label):
         with open("../data.yaml", "r") as f:
             data = f.read()
         current_nc = int(data.split("nc: ")[1].split("\n")[0])
@@ -325,7 +330,6 @@ class LabelEditor(QDialog):
         lines[first_line_idx:last_line_idx + 1] = new_name_lines #replace old lines with new lines based on new indices
         with open("../data.yaml", "w") as f: #write
             f.write("\n".join(lines))
-
 
 
 
