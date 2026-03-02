@@ -142,11 +142,7 @@ class ImageLoader(QMainWindow):
 
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
-
-        self.clear_search = QPushButton()
-        self.clear_search.setIcon(qta.icon("fa6s.x"))
-        self.clear_search.setToolTip("Clear Image Search")
-        self.clear_search.clicked.connect(self.clear_search_bar)
+        self.search_box.setClearButtonEnabled(True)
 
         self.delete_button = QPushButton()
         self.delete_button.setIcon(qta.icon('fa6s.trash'))
@@ -180,7 +176,6 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.confirm_toggle, 1, 2)
         layout.addWidget(self.label_dropdown,1,3)
         layout.addWidget(self.search_box, 1, 5)
-        layout.addWidget(self.clear_search, 1, 6)
 
         # Image Layout (and next/previous buttons)
         layout.addWidget(self.previousImage, 4, 0)
@@ -300,6 +295,19 @@ class ImageLoader(QMainWindow):
             self.current_index = -1
             self.show_no_images_popup()
 
+    def show_no_images_popup(self):
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("No Images")
+        msg.setText("This folder contains no images.\n Select a new working directory.")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+
+    def on_list_item_clicked(self, item):
+        self.current_index = self.image_list.row(item)
+        print(self.current_index)
+        self.update_display()
+        
     def next_image(self):
         if not self.filtered_images:
             return
