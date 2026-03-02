@@ -17,9 +17,12 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QCheckBox,
     QComboBox,
-    QApplication
+    QApplication,
+    QScrollArea,
+    QVBoxLayout,
+    
 )
-
+from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
 from PySide6.QtCore import Qt, QSortFilterProxyModel,QStringListModel
 import qtawesome as qta
@@ -43,6 +46,8 @@ class ImageLoader(QMainWindow):
         self.filtered_images = []
         self.labels = []
         self.drive = drive
+        self.detections = []
+        self.detection_combos = []
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
@@ -81,6 +86,12 @@ class ImageLoader(QMainWindow):
         layout = QGridLayout(central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
+        self.detection_editor = QScrollArea()
+        self.detection_editor.setWidgetResizable(True)
+        self.container = QWidget()
+        self.layout = QVBoxLayout(self.container)
+        self.detection_editor.setWidget(self.container)
 
         # -----------------------------
         # Navbar
@@ -128,6 +139,8 @@ class ImageLoader(QMainWindow):
 
         self.image_list = QListWidget()
 
+        self.detection_label = QLabel("Detections:") 
+
         self.label_dropdown = QComboBox()
         self.label_dropdown.setEditable(True)
         self.label_dropdown.setInsertPolicy(QComboBox.NoInsert)
@@ -170,28 +183,46 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Layout placement
         # -----------------------------
+        # Make image area expand
         layout.setColumnStretch(3, 1)
-        layout.setRowStretch(2, 1)
-        
-        # Nav Bar Row
+        layout.setRowStretch(3, 1)   # detection scroll expands
+        # -----------------------------
+        # Nav Bar
+        # -----------------------------
         layout.addWidget(self.nav_bar, 0, 0, 1, 7)
-
+        # -----------------------------
+        # Top Controls Row
+        # -----------------------------
         layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
         layout.addWidget(self.confirm_toggle, 1, 2)
-        layout.addWidget(self.label_dropdown,1,3)
+        layout.addWidget(self.label_dropdown, 1, 3)
         layout.addWidget(self.search_box, 1, 5)
         layout.addWidget(self.clear_search, 1, 6)
-
-        layout.addWidget(self.previousImage, 4, 0)
-        layout.addWidget(self.image_label, 2, 1, 1, 3)
-        layout.addWidget(self.nextImage, 4, 4, 1, 1)
-
-        layout.addWidget(self.delete_button, 3, 1)
-        layout.addWidget(self.verification_status, 3, 2)
-        layout.addWidget(self.verify_image, 3, 3)
-        layout.addWidget(self.unverify_image_btn, 3, 4)
-
-        layout.addWidget(self.image_list, 2, 5, 2, 2)
+        # -----------------------------
+        # Main Content Area
+        # -----------------------------
+        # Detection label
+        layout.addWidget(self.detection_label, 2, 0)
+        # Image in center
+        layout.addWidget(self.image_label, 2, 1, 2, 3)
+        # Image list on right
+        layout.addWidget(self.image_list, 2, 5, 3, 2)
+        # -----------------------------
+        # Detection Scroll Area
+        # -----------------------------
+        layout.addWidget(self.detection_editor, 3, 0)
+        # -----------------------------
+        # Verification Controls (moved down one row)
+        # -----------------------------
+        layout.addWidget(self.delete_button, 4, 1)
+        layout.addWidget(self.verification_status, 4, 2)
+        layout.addWidget(self.verify_image, 4, 3)
+        layout.addWidget(self.unverify_image_btn, 4, 4)
+        # -----------------------------
+        # Navigation Row
+        # -----------------------------
+        layout.addWidget(self.previousImage, 5, 0)
+        layout.addWidget(self.nextImage, 5, 4)
 
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         self.search_box.textChanged.connect(self.filter_list)
@@ -300,6 +331,43 @@ class ImageLoader(QMainWindow):
         self.current_index = (self.current_index - 1) % len(self.filtered_images)
         self.update_display()
 
+    def clear_detections(self):
+        while self.layout.count():
+            item = self.layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        self.detection_combos.clear()
+    
+    def populate_detections(self, detections, class_list):
+        self.clear_detections()
+
+        for i, det in enumerate(detections):
+
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+
+            # Detection info label
+            info_label = QLabel(
+                f"{i+1}: {det['class_name']} "
+                f"({det['confidence']:.2f})"
+            )
+
+            # Dropdown
+            combo = QComboBox()
+            combo.addItems(class_list)
+            combo.setCurrentText(det["class_name"])
+
+            row_layout.addWidget(info_label)
+            row_layout.addWidget(combo)
+
+            self.layout.addWidget(row_widget)
+
+            self.detection_combos.append(combo)
+
+        self.layout.addStretch()
+
     def update_display(self):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
@@ -333,6 +401,9 @@ class ImageLoader(QMainWindow):
             self.verify_image.setEnabled(True)
             self.image_label.setStyleSheet("")
 
+        self.detections = self.labeler.get_detections(path)
+        class_list = list(self.labeler.model.names.values())
+        self.populate_detections(self.detections, class_list)
     
     def mark_verified(self):
         if not self.filtered_images:

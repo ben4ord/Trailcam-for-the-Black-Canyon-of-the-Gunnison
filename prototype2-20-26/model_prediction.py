@@ -20,8 +20,36 @@ class ImageLabeler:
         results = self.model(image_path, verbose=False)
         return results[0]
 
+   
     def label_image(self, image_path: str) -> np.ndarray:
         return self.predict(image_path).plot()
+    
+    def get_detections(self, image_path: str) -> list[dict]:
+        result = self.predict(image_path)
+        boxes = result.boxes
+
+        if boxes is None or len(boxes) == 0:
+            return []
+
+        class_ids = boxes.cls.tolist()
+        confidences = boxes.conf.tolist()
+        xyxy = boxes.xyxy.tolist()
+        xywhn = boxes.xywhn.tolist()
+
+        detections = []
+
+        for class_id, conf, box_xyxy, box_xywhn in zip(
+            class_ids, confidences, xyxy, xywhn
+        ):
+            detections.append({
+                "class_id": int(class_id),
+                "class_name": result.names[int(class_id)],
+                "confidence": float(conf),
+                "bbox_xyxy": box_xyxy,
+                "bbox_xywhn": box_xywhn,
+            })
+
+        return detections
 
     @staticmethod
     def to_yolo_label_lines(result) -> list[str]:
