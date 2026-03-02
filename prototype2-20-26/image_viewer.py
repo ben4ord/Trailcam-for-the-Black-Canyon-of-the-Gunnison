@@ -143,11 +143,7 @@ class ImageLoader(QMainWindow):
 
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
-
-        self.clear_search = QPushButton()
-        self.clear_search.setIcon(qta.icon("fa6s.x"))
-        self.clear_search.setToolTip("Clear Image Search")
-        self.clear_search.clicked.connect(self.clear_search_bar)
+        self.search_box.setClearButtonEnabled(True)
 
         self.delete_button = QPushButton()
         self.delete_button.setIcon(qta.icon('fa6s.trash'))
@@ -180,7 +176,6 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.confirm_toggle, 1, 2)
         layout.addWidget(self.label_dropdown,1,3)
         layout.addWidget(self.search_box, 1, 5)
-        layout.addWidget(self.clear_search, 1, 6)
 
         layout.addWidget(self.previousImage, 4, 0)
         layout.addWidget(self.image_label, 2, 1, 1, 3)
@@ -280,11 +275,6 @@ class ImageLoader(QMainWindow):
         self.current_index = self.image_list.row(item)
         print(self.current_index)
         self.update_display()
-    
-    def clear_search_bar(self):
-        self.search_box.setText('')
-        item = self.image_list.item(self.current_index)
-        self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
         
     def next_image(self):
         if not self.filtered_images:
