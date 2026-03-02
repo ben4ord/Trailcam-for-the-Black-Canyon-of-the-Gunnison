@@ -294,19 +294,6 @@ class ImageLoader(QMainWindow):
         else:
             self.current_index = -1
             self.show_no_images_popup()
-
-    def show_no_images_popup(self):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("No Images")
-        msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
-
-    def on_list_item_clicked(self, item):
-        self.current_index = self.image_list.row(item)
-        print(self.current_index)
-        self.update_display()
         
     def next_image(self):
         if not self.filtered_images:
