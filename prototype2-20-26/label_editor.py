@@ -231,7 +231,7 @@ class LabelEditor(QDialog):
             f"Are you sure you want to delete '{current_item.text()}'?",
             QMessageBox.Yes | QMessageBox.No # type: ignore
         )
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.Yes: #type: ignore
             self._remove_from_txt(current_item.text())
             self._remove_from_yaml(current_item.text())
             self.label_list.clear()

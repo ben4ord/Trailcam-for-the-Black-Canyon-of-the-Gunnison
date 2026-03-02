@@ -4,6 +4,7 @@ from PySide6.QtGui import QGuiApplication
 
 from image_viewer import ImageLoader
 from nav_bar import NavBar
+from train_model import TrainModel
 
 class MenuWindow(QMainWindow):
     def __init__(self,drive):
@@ -43,19 +44,29 @@ class MenuWindow(QMainWindow):
         
         # Add button to next window
         self.viewImages = QPushButton('View Images')
-        self.viewImages.clicked.connect(self.next_window)
+        self.viewImages.clicked.connect(self.view_image_window)
         layout.addWidget(self.viewImages, 1, 0, 2, 6)
 
+        # Add button for training new model
+        self.trainModel = QPushButton('Train Model')
+        self.trainModel.clicked.connect(self.train_model_window)
+        layout.addWidget(self.trainModel, 2, 0, 2, 6)
+
+        # Debugging prints
         print("Drive received:")
         print(self.drive)
         print(self.drive)
         self.show()
 
 
-    def next_window(self):
-        self.nextWindow = ImageLoader(self.drive)
-        self.nextWindow.show()
+    def view_image_window(self):
+        self.imageWindow = ImageLoader(self.drive)
+        self.imageWindow.show()
         self.close()
 
+    def train_model_window(self):
+        self.imageWindow = TrainModel(self.drive)
+        self.imageWindow.show()
+        self.close()
 
         
