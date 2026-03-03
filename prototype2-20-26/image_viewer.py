@@ -17,8 +17,12 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QCheckBox,
     QComboBox,
+    QApplication,
+    QScrollArea,
+    QVBoxLayout,
+    
 )
-
+from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
 from PySide6.QtCore import Qt, QSortFilterProxyModel,QStringListModel
 import qtawesome as qta
@@ -42,11 +46,14 @@ class ImageLoader(QMainWindow):
         self.filtered_images = []
         self.labels = []
         self.drive = drive
+        self.detections = []
+        self.detection_combos = []
+        self.deletion_bounding_box_cords = []
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
         self.load_labels()
-        print(self.labels)
+        # print(self.labels)
         self.current_index = 0
         self.filter_mode = "all"
 
@@ -81,6 +88,12 @@ class ImageLoader(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        self.detection_editor = QListWidget()
+        self.detection_editor.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        self.detection_editor.currentRowChanged.connect(
+            self.on_detection_selected
+        )
         # -----------------------------
         # Navbar
         # -----------------------------
@@ -127,18 +140,7 @@ class ImageLoader(QMainWindow):
 
         self.image_list = QListWidget()
 
-        self.label_dropdown = QComboBox()
-        self.label_dropdown.setEditable(True)
-        self.label_dropdown.setInsertPolicy(QComboBox.NoInsert) # type: ignore
-        self.label_dropdown.setCompleter(None) # type: ignore
-        self.model = QStringListModel(self.labels)
-        self.proxy = QSortFilterProxyModel()
-        self.proxy.setSourceModel(self.model)
-        self.proxy.setFilterCaseSensitivity(Qt.CaseInsensitive) # type: ignore
-        self.proxy.setFilterRole(Qt.DisplayRole) # type: ignore
-
-        self.label_dropdown.setModel(self.proxy)
-        self.label_dropdown.lineEdit().textEdited.connect(self.filter_labels) # type: ignore
+        self.detection_label = QLabel("Detections:") 
 
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
@@ -165,31 +167,44 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Layout placement
         # -----------------------------
+        # Make image area expand
         layout.setColumnStretch(3, 1)
-        layout.setRowStretch(2, 1)
-        
-        # Nav Bar Row
+        layout.setRowStretch(3, 1)   # detection scroll expands
+        # -----------------------------
+        # Nav Bar
+        # -----------------------------
         layout.addWidget(self.nav_bar, 0, 0, 1, 7)
-
-        # First Row
+        # -----------------------------
+        # Top Controls Row
+        # -----------------------------
         layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
         layout.addWidget(self.confirm_toggle, 1, 2)
-        layout.addWidget(self.label_dropdown,1,3)
         layout.addWidget(self.search_box, 1, 5)
-
-        # Image Layout (and next/previous buttons)
-        layout.addWidget(self.previousImage, 4, 0)
-        layout.addWidget(self.image_label, 2, 1, 1, 3)
-        layout.addWidget(self.nextImage, 4, 4, 1, 1)
-
-        # Lower Layout
-        layout.addWidget(self.delete_button, 3, 1)
-        layout.addWidget(self.verification_status, 3, 2)
-        layout.addWidget(self.verify_image, 3, 3)
-        layout.addWidget(self.unverify_image_btn, 3, 4)
-
-        # Side panel (image list)
-        layout.addWidget(self.image_list, 2, 5, 2, 2)
+        # -----------------------------
+        # Main Content Area
+        # -----------------------------
+        # Detection label
+        layout.addWidget(self.detection_label, 2, 0)
+        # Image in center
+        layout.addWidget(self.image_label, 2, 1, 2, 3)
+        # Image list on right
+        layout.addWidget(self.image_list, 2, 5, 3, 2)
+        # -----------------------------
+        # Detection Scroll Area
+        # -----------------------------
+        layout.addWidget(self.detection_editor, 3, 0)
+        # -----------------------------
+        # Verification Controls (moved down one row)
+        # -----------------------------
+        layout.addWidget(self.delete_button, 4, 1)
+        layout.addWidget(self.verification_status, 4, 2)
+        layout.addWidget(self.verify_image, 4, 3)
+        layout.addWidget(self.unverify_image_btn, 4, 4)
+        # -----------------------------
+        # Navigation Row
+        # -----------------------------
+        layout.addWidget(self.previousImage, 5, 0)
+        layout.addWidget(self.nextImage, 5, 4)
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
@@ -202,6 +217,7 @@ class ImageLoader(QMainWindow):
 
         if self.filtered_images:
             self.image_list.setCurrentRow(self.current_index)
+            self.load_current_image_data()
             self.update_display()
 
         self.show()
@@ -294,12 +310,26 @@ class ImageLoader(QMainWindow):
         else:
             self.current_index = -1
             self.show_no_images_popup()
+
+    def show_no_images_popup(self):
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("No Images")
+        msg.setText("This folder contains no images.\n Select a new working directory.")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+
+    def on_list_item_clicked(self, item):
+        self.current_index = self.image_list.row(item)
+        self.load_current_image_data()
+        self.update_display()
         
     def next_image(self):
         if not self.filtered_images:
             return
 
         self.current_index = (self.current_index + 1) % len(self.filtered_images)
+        self.load_current_image_data()
         self.update_display()
 
     def previous_image(self):
@@ -307,52 +337,122 @@ class ImageLoader(QMainWindow):
             return
 
         self.current_index = (self.current_index - 1) % len(self.filtered_images)
+        self.load_current_image_data()
         self.update_display()
 
-    def get_imgs(self, drive, new_dir=False):
-        if(new_dir):
-            self.images.clear()
-        imgs = []
-        # print(f"Getting images from {drive}")
-        if os.path.exists(drive):
-            for filename in os.listdir(drive):
-                # Check for image extension AND ensure it doesn't start with '.'
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
-                    if not filename.startswith('.'): 
-                        img_path = os.path.join(drive, filename)   
-                        imgs.append(img_path)
+    
+    def populate_detections(self, detections, class_list):
+        self.detection_editor.clear()
+        self.detection_combos.clear()
 
-        self.images = imgs
-        self.filtered_images = list(imgs)
-        if not imgs:
-            self.show_no_images_popup()
+        for i, det in enumerate(detections):
+
+            item = QListWidgetItem()
+            self.detection_editor.addItem(item)
+
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(5, 2, 5, 2)
+
+            info_label = QLabel(
+                f"{i+1}: {det['class_name']} "
+                f"({det['confidence']:.2f})"
+            )
+            delete_btn = QPushButton()
+            delete_btn.setIcon(qta.icon('fa6s.x'))
+            # Pass through object 
+            delete_btn.clicked.connect(
+                lambda _, det=det: self.delete_detection_object(det)
+            )
+            combo = QComboBox()
+            combo.addItems(class_list)
+            combo.setCurrentText(det["class_name"])
+            combo.currentTextChanged.connect(
+                lambda text, i=i: self.on_detection_label_change(i,text)
+            )
+            row_layout.addWidget(delete_btn)
+            row_layout.addWidget(info_label)
+            row_layout.addStretch()
+            row_layout.addWidget(combo)
+
+            item.setSizeHint(row_widget.sizeHint())
+            self.detection_editor.setItemWidget(item, row_widget)
+
+            self.detection_combos.append(combo)
+    
+    def delete_detection_object(self, det):
+
+        # Extract coordinates BEFORE removing
+        x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
+        print("Deleting box:", x1, y1, x2, y2)
+
+        # Remove detection
+        self.detections.remove(det)
+
+        # Refresh UI
+        self.populate_detections(
+            self.detections,
+            list(self.labeler.model.names.values())
+        )
+        yoloBoxes = [x1,y1,x2,y2]
+        self.deletion_bounding_box_cords.append(yoloBoxes)
+        # Redraw bounding box
+        self.update_display()
+
+    def load_current_image_data(self):
+        self.deletion_bounding_box_cords.clear()
+        path = self.filtered_images[self.current_index]
+        self.detections = self.labeler.get_detections(path)
+        class_list = list(self.labeler.model.names.values())
+        self.populate_detections(self.detections, class_list)
+
+    def on_detection_selected(self, index):
+        if index < 0 or index >= len(self.detections):
             return
 
-        return 
+        det = self.detections[index]
+        x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
 
+        combo = self.detection_combos[index]
+        combo.setFocus()
 
-    # -----------------------------
-    # Button press functions
-    # -----------------------------
-    def on_list_item_clicked(self, item):
-        self.current_index = self.image_list.row(item)
-        print(self.current_index)
-        self.update_display()
-    
-    def clear_search_bar(self):
-        self.search_box.setText('')
-        item = self.image_list.item(self.current_index)
-        self.image_list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
+        self.update_display([x1, y1, x2, y2], True)
+
+    def on_detection_label_change(self, index, new_label):
+        if index < 0 or index >= len(self.detections):
+            return
+
+        if new_label not in self.labels:
+            return
+
+        self.detections[index]['class_name'] = new_label
+        new_id = self.labels.index(new_label)
+        self.detections[index]['class_id'] = new_id
+
+       
         
 
-    def update_display(self):
+    def update_display(self,yoloBoxes=None,selection=False,Delete=False):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
-
+        
         path = self.filtered_images[self.current_index]
         labeled_image = self.labeler.label_image(path)
         color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+        # Draw box around users selected object
+        if selection and not Delete:
+            color = (0, 255, 0) # Green color (BGR format)
+            thickness = 2
+            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #
+        if len(self.deletion_bounding_box_cords):
+            color = (255, 0, 0) # Red color (BGR format)
+            thickness = 5
+            for box in self.deletion_bounding_box_cords:
+                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness) #
+
+
+            
         pil_image = Image.fromarray(color_correction)
         pixmap = QPixmap.fromImage(pil_image.toqimage())
         scaled_pixmap = pixmap.scaled(
@@ -393,9 +493,8 @@ class ImageLoader(QMainWindow):
             "Verify this image?"
         ):
             return
-    
-        prediction = self.labeler.predict(source)
-        label_lines = self.labeler.to_yolo_label_lines(prediction)
+        print(self.detections)
+        label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
         self._show_info(
@@ -435,6 +534,29 @@ class ImageLoader(QMainWindow):
         self.verification_status.setStyleSheet("color: red;")
         self.image_label.setStyleSheet("")
   
+
+    def get_imgs(self, drive, new_dir=False):
+        if(new_dir):
+            self.images.clear()
+            self.deletion_bounding_box_cords.clear()
+        imgs = []
+        # print(f"Getting images from {drive}")
+        if os.path.exists(drive):
+            for filename in os.listdir(drive):
+                # Check for image extension AND ensure it doesn't start with '.'
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+                    if not filename.startswith('.'): 
+                        img_path = os.path.join(drive, filename)   
+                        imgs.append(img_path)
+
+        self.images = imgs
+        self.filtered_images = list(imgs)
+        if not imgs:
+            self.show_no_images_popup()
+            return
+
+        return 
+    
     def open_dir_dialog(self):
         dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
         if dir_name:
@@ -515,14 +637,4 @@ class ImageLoader(QMainWindow):
         except Exception as e:
             print(e)
     
-    def filter_labels(self,text):
-        # Prevent combo from changing selection during filtering
-        self.proxy.setFilterFixedString(text)
 
-        if self.proxy.rowCount() == 0:
-            self.label_dropdown.hidePopup()
-            return
-
-        # Only show popup if it's not already visible
-        if not self.label_dropdown.view().isVisible():
-            self.label_dropdown.showPopup()

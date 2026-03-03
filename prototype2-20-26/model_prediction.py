@@ -20,22 +20,55 @@ class ImageLabeler:
         results = self.model(image_path, verbose=False)
         return results[0]
 
+   
     def label_image(self, image_path: str) -> np.ndarray:
         return self.predict(image_path).plot()
-
-    @staticmethod
-    def to_yolo_label_lines(result) -> list[str]:
+    
+    def get_detections(self, image_path: str) -> list[dict]:
+        result = self.predict(image_path)
         boxes = result.boxes
+
         if boxes is None or len(boxes) == 0:
             return []
 
-        classes = boxes.cls.tolist()
-        normalized_xywh = boxes.xywhn.tolist()
+        class_ids = boxes.cls.tolist()
+        confidences = boxes.conf.tolist()
+        xyxy = boxes.xyxy.tolist()
+        xywhn = boxes.xywhn.tolist()
+
+        detections = []
+
+        for class_id, conf, box_xyxy, box_xywhn in zip(
+            class_ids, confidences, xyxy, xywhn
+        ):
+            detections.append({
+                "class_id": int(class_id),
+                "class_name": result.names[int(class_id)],
+                "confidence": float(conf),
+                "bbox_xyxy": box_xyxy,
+                "bbox_xywhn": box_xywhn,
+            })
+
+        return detections
+    
+    
+    @staticmethod
+    def to_yolo_label_lines(detections) -> list[str]:
+        if not detections:
+            return []
 
         lines = []
-        for class_id, (x_center, y_center, width, height) in zip(classes, normalized_xywh):
+
+        for det in detections:
+            class_id = int(det["class_id"])
+            x_center, y_center, width, height = det["bbox_xywhn"]
+
             lines.append(
-                f"{int(class_id)} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}"
+                f"{class_id} "
+                f"{x_center:.6f} "
+                f"{y_center:.6f} "
+                f"{width:.6f} "
+                f"{height:.6f}"
             )
 
         return lines
