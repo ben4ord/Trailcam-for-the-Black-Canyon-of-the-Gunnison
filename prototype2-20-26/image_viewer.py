@@ -142,19 +142,6 @@ class ImageLoader(QMainWindow):
 
         self.detection_label = QLabel("Detections:") 
 
-        self.label_dropdown = QComboBox()
-        self.label_dropdown.setEditable(True)
-        self.label_dropdown.setInsertPolicy(QComboBox.NoInsert)
-        self.label_dropdown.setCompleter(None)
-        self.model = QStringListModel(self.labels)
-        self.proxy = QSortFilterProxyModel()
-        self.proxy.setSourceModel(self.model)
-        self.proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
-        self.proxy.setFilterRole(Qt.DisplayRole)
-
-        self.label_dropdown.setModel(self.proxy)
-        self.label_dropdown.lineEdit().textEdited.connect(self.filter_labels)
-
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
         self.search_box.setClearButtonEnabled(True)
@@ -192,9 +179,7 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
         layout.addWidget(self.confirm_toggle, 1, 2)
-        layout.addWidget(self.label_dropdown, 1, 3)
         layout.addWidget(self.search_box, 1, 5)
-        layout.addWidget(self.clear_search, 1, 6)
         # -----------------------------
         # Main Content Area
         # -----------------------------
@@ -628,14 +613,4 @@ class ImageLoader(QMainWindow):
         except Exception as e:
             print(e)
     
-    def filter_labels(self,text):
-        # Prevent combo from changing selection during filtering
-        self.proxy.setFilterFixedString(text)
 
-        if self.proxy.rowCount() == 0:
-            self.label_dropdown.hidePopup()
-            return
-
-        # Only show popup if it's not already visible
-        if not self.label_dropdown.view().isVisible():
-            self.label_dropdown.showPopup()
