@@ -35,9 +35,12 @@ class TrainModel(QMainWindow):
             update_labels=False,
             new_folder=False
         )
+        self.nav_bar.homeClicked.connect(self.menu_window)
 
         # Layout
         layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         layout.addWidget(self.nav_bar)
 
@@ -115,3 +118,9 @@ class TrainModel(QMainWindow):
         if self.thread:
             self.thread.quit()
             self.thread.wait()
+
+    def menu_window(self):
+        from menu import MenuWindow
+        self.menuWindow = MenuWindow(self.drive)
+        self.menuWindow.show()
+        self.close()
