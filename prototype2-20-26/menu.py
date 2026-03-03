@@ -27,7 +27,7 @@ class MenuWindow(QMainWindow):
         self.nav_bar.set_button_visibility(
             home=False,
             update_labels=False,
-            new_folder=False
+            new_folder=True
         )
 
         # central widget

@@ -5,7 +5,7 @@ import numpy as np
 
 
 class ImageLabeler:
-    def __init__(self, model_path="best.pt"):
+    def __init__(self):
         # Detect if running inside PyInstaller bundle
         def resource_path(relative_path: str):
             if hasattr(sys, "_MEIPASS"):
@@ -13,7 +13,7 @@ class ImageLabeler:
             return os.path.join(os.path.abspath("."), relative_path)
 
         # Resolve full model path
-        full_model_path = resource_path("best.pt")
+        full_model_path = resource_path("Models/best.pt")
         self.model = YOLO(full_model_path)
 
     def predict(self, image_path: str):
