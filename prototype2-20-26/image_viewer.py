@@ -380,7 +380,7 @@ class ImageLoader(QMainWindow):
         # Refresh UI
         self.populate_detections(
             self.detections,
-            list(self.labeler.model.names.values())
+            self.labels
         )
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
@@ -391,7 +391,7 @@ class ImageLoader(QMainWindow):
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
         self.detections = self.labeler.get_detections(path)
-        class_list = list(self.labeler.model.names.values())
+        class_list = self.labels
         self.populate_detections(self.detections, class_list)
 
     def on_detection_selected(self, index):
