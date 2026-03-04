@@ -11,6 +11,8 @@ from PySide6.QtGui import QGuiApplication, QCloseEvent
 
 from training_worker import TrainingWorker
 from nav_bar import NavBar
+import torch.cuda
+import torch.backends.mps
 
 
 class TrainModel(QMainWindow):
@@ -102,6 +104,14 @@ class TrainModel(QMainWindow):
         if self.progress_bar.minimum() == 0 and self.progress_bar.maximum() == 0:
             self.progress_bar.setRange(0, 10000)
 
+    def _get_device(self):
+        if torch.cuda.is_available():
+            return "0"          # Windows/Linux with NVIDIA GPU
+        elif torch.backends.mps.is_available():
+            return "mps"        # Apple Silicon Mac
+        else:
+            return "cpu"        # Fallback
+
     def train_new_model(self):
         if self.thread and self.thread.isRunning():
             return
@@ -116,7 +126,7 @@ class TrainModel(QMainWindow):
             "epochs=200",
             "imgsz=512",
             "batch=32",
-            "device=0",
+            f"device={self._get_device()}",
             "patience=15",
             "project=Models",
             "name=experiment1"
