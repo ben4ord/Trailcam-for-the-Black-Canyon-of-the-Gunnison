@@ -5,3 +5,4 @@ __pycache__/
 .vscode/
 settings.json
 verified_images/
+Models/
