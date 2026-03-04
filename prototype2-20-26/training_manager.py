@@ -1,14 +1,21 @@
 from pathlib import Path
 import shutil
 import re
-
+import sys
 
 class TrainingManager:
     def __init__(self, root_drive):
         self.root_drive = Path(root_drive)
 
         # Centralized training set location beside this module.
-        self.train_root = Path(__file__).resolve().parent / "verified_images/dataset"
+        # This is for the executable to work properly
+        if getattr(sys, "frozen", False):
+            base_dir = Path(sys.executable).parent
+        else:
+            base_dir = Path(__file__).resolve().parent
+
+        self.train_root = base_dir / "verified_images" / "dataset"
+
         self.images_dir = self.train_root / "images"
         self.labels_dir = self.train_root / "labels"
 

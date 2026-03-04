@@ -5,15 +5,15 @@ import numpy as np
 
 
 class ImageLabeler:
-    def __init__(self, model_path="best.pt"):  # yolov8n.pt
+    def __init__(self):
         # Detect if running inside PyInstaller bundle
-        if hasattr(sys, "_MEIPASS"):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.abspath(".")
+        def resource_path(relative_path: str):
+            if hasattr(sys, "_MEIPASS"):
+                return os.path.join(sys._MEIPASS, relative_path) #type: ignore
+            return os.path.join(os.path.abspath("."), relative_path)
 
         # Resolve full model path
-        full_model_path = os.path.join(base_path, model_path)
+        full_model_path = resource_path("Models/best_3-3-2026.pt")
         self.model = YOLO(full_model_path)
 
     def predict(self, image_path: str):

@@ -5,4 +5,7 @@ __pycache__/
 .vscode/
 settings.json
 verified_images/
+build/*
+select_directory.spec
+runs/
 Models/

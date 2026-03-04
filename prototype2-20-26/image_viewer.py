@@ -17,14 +17,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QCheckBox,
     QComboBox,
-    QApplication,
-    QScrollArea,
-    QVBoxLayout,
-    
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
-from PySide6.QtCore import Qt, QSortFilterProxyModel,QStringListModel
+from PySide6.QtCore import Qt
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
@@ -159,10 +155,10 @@ class ImageLoader(QMainWindow):
         self.nextImage.clicked.connect(self.next_image)
 
         # Keyboard shortcuts
-        QShortcut(Qt.Key_Right, self, self.next_image)
-        QShortcut(Qt.Key_Left, self, self.previous_image)
-        QShortcut(Qt.Key_Return, self, self.mark_verified)
-        QShortcut(Qt.Key_Enter, self, self.mark_verified)
+        QShortcut(Qt.Key_Right, self, self.next_image) # type: ignore
+        QShortcut(Qt.Key_Left, self, self.previous_image) # type: ignore
+        QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
+        QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
 
         # -----------------------------
         # Layout placement
@@ -206,6 +202,7 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.previousImage, 5, 0)
         layout.addWidget(self.nextImage, 5, 4)
 
+        # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         self.search_box.textChanged.connect(self.filter_list)
 
@@ -221,6 +218,10 @@ class ImageLoader(QMainWindow):
 
         self.show()
 
+
+    # -----------------------------
+    # Helpful UI Functions
+    # -----------------------------
     def _confirm_action(self, title, message):
         if not self.confirm_toggle.isChecked():
             return True
@@ -229,10 +230,10 @@ class ImageLoader(QMainWindow):
             self,
             title,
             message,
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No # type: ignore
         )
 
-        return reply == QMessageBox.Yes
+        return reply == QMessageBox.Yes # type: ignore
     
     def _show_info(self, title, message):
         if not self.confirm_toggle.isChecked():
@@ -244,13 +245,37 @@ class ImageLoader(QMainWindow):
             message
         )
 
+    def show_no_images_popup(self):
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information) # type: ignore
+        msg.setWindowTitle("No Images")
+        msg.setText("This folder contains no images.\n Select a new working directory.")
+        msg.setStandardButtons(QMessageBox.Ok) # type: ignore
+        msg.exec()
+
+
+    # -----------------------------
+    # Image handle functions
+    # -----------------------------
     def load_image_list(self):
         self.image_list.clear()
 
         for image in self.filtered_images:
             item = QListWidgetItem(Path(image).name)
-            item.setData(Qt.UserRole, image)
-            self.image_list.addItem(item)   
+            item.setData(Qt.UserRole, image) # type: ignore
+            self.image_list.addItem(item)
+
+    def filter_list(self, text):
+        text = text.lower()
+
+        for row in range(self.image_list.count()):
+            item = self.image_list.item(row)
+
+            filename = item.text().lower()
+            #full_path = item.data(Qt.UserRole).lower()
+
+            match = text in filename
+            item.setHidden(not match)
 
     def delete_image(self):
         if not self.images:
@@ -281,14 +306,6 @@ class ImageLoader(QMainWindow):
         else:
             self.current_index = -1
             self.show_no_images_popup()
-
-    def show_no_images_popup(self):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("No Images")
-        msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
 
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
@@ -476,6 +493,8 @@ class ImageLoader(QMainWindow):
         self.verify_image.setEnabled(False)
         self.image_label.setStyleSheet("border: 4px solid green;")
 
+        self.next_image() # automatically scroll to next image (less button clicking)
+
     def unverify_image(self):
         if not self.filtered_images:
             return
@@ -532,6 +551,7 @@ class ImageLoader(QMainWindow):
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
+
             self.get_imgs(self.drive, True)
             self.load_image_list()
 
@@ -540,24 +560,12 @@ class ImageLoader(QMainWindow):
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
-
+            
             self.training_manager = TrainingManager(self.drive)
             self.training_manager._build_cache()
 
-    def filter_list(self, text):
-        text = text.lower()
-
-        for row in range(self.image_list.count()):
-            item = self.image_list.item(row)
-
-            filename = item.text().lower()
-            #full_path = item.data(Qt.UserRole).lower()
-
-            match = text in filename
-            item.setHidden(not match)
-
     def menu_window(self):
-        from menu import MenuWindow
+        from home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()
@@ -567,6 +575,10 @@ class ImageLoader(QMainWindow):
             editor = LabelEditor(self)
             editor.exec()
 
+
+    # -----------------------------
+    # Filtering functions
+    # -----------------------------
     def on_image_filter_changed(self, index):
         # Map dropdown index to filter mode
         if index == 0:
