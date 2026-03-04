@@ -267,7 +267,7 @@ class TrainModel(QMainWindow):
 
     def menu_window(self):
         self._shutdown_training()
-        from menu import MenuWindow
+        from home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()
