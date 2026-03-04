@@ -22,3 +22,4 @@ squirrel
 mustelid
 unidentified animal
 vehicle
+crow

@@ -374,8 +374,7 @@ class ImageLoader(QMainWindow):
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
         self.detections = self.labeler.get_detections(path)
-        class_list = list(self.labeler.model.names.values())
-        self.populate_detections(self.detections, class_list)
+        self.populate_detections(self.detections, self.labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
