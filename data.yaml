@@ -1,4 +1,4 @@
-path: dataset
+path: verified_images/dataset
 
 train: images
 val: images

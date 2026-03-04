@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt
 import qtawesome as qta
-from torch import layout
 from nav_bar import NavBar
 
 class LabelEditor(QDialog):
@@ -79,7 +78,7 @@ class LabelEditor(QDialog):
         self.stack.addWidget(selected_label_page)
 
         self.selected_label = QLabel("No label selected")
-        self.selected_label.setAlignment(Qt.AlignCenter)
+        self.selected_label.setAlignment(Qt.AlignCenter) # type: ignore
         selected_label_layout.addWidget(self.selected_label)
 
         # Edit/Delete buttons
@@ -229,9 +228,9 @@ class LabelEditor(QDialog):
             self,
             "Delete Label",
             f"Are you sure you want to delete '{current_item.text()}'?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No # type: ignore
         )
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.Yes: #type: ignore
             self._remove_from_txt(current_item.text())
             self._remove_from_yaml(current_item.text())
             self.label_list.clear()
