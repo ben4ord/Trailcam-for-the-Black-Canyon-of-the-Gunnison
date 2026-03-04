@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt
 import qtawesome as qta
-from torch import layout
 from nav_bar import NavBar
 
 class LabelEditor(QDialog):

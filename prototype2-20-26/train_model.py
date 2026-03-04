@@ -80,7 +80,7 @@ class TrainModel(QMainWindow):
         ]
 
         self.thread = QThread()
-        self.worker = TrainingWorker(cmd)
+        self.worker = TrainingWorker(cmd, self.drive)
 
         self.worker.moveToThread(self.thread)
 
@@ -91,6 +91,7 @@ class TrainModel(QMainWindow):
 
         self.thread.start()
 
+        self.append_log(f"Launching training from folder: {self.drive}")
         self.train_btn.setEnabled(False)
 
     # -----------------------------
@@ -109,11 +110,18 @@ class TrainModel(QMainWindow):
     def training_finished(self):
         self.train_btn.setEnabled(True)
 
-        QMessageBox.information(
-            self,
-            "Training Complete",
-            "Model training finished."
-        )
+        if self.worker and self.worker.had_error:
+            QMessageBox.warning(
+                self,
+                "Training Failed",
+                "Training failed. Check the log panel for details."
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Training Complete",
+                "Model training finished."
+            )
 
         if self.thread:
             self.thread.quit()

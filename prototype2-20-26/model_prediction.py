@@ -13,7 +13,7 @@ class ImageLabeler:
             return os.path.join(os.path.abspath("."), relative_path)
 
         # Resolve full model path
-        full_model_path = resource_path("Models/best.pt")
+        full_model_path = resource_path("Models/best_3-3-2026.pt")
         self.model = YOLO(full_model_path)
 
     def predict(self, image_path: str):

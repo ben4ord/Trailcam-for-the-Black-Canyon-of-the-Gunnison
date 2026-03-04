@@ -7,3 +7,4 @@ settings.json
 verified_images/
 build/*
 select_directory.spec
+runs/

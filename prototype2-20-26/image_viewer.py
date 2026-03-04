@@ -17,14 +17,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QCheckBox,
     QComboBox,
-    QApplication,
-    QScrollArea,
-    QVBoxLayout,
-    
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
-from PySide6.QtCore import Qt, QSortFilterProxyModel,QStringListModel
+from PySide6.QtCore import Qt
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
@@ -311,14 +307,6 @@ class ImageLoader(QMainWindow):
             self.current_index = -1
             self.show_no_images_popup()
 
-    def show_no_images_popup(self):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("No Images")
-        msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
-
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
         self.load_current_image_data()
@@ -578,7 +566,7 @@ class ImageLoader(QMainWindow):
             self.training_manager._build_cache()
 
     def menu_window(self):
-        from menu import MenuWindow
+        from home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()

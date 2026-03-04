@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout, QSizePolicy
+from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal
 
 import qtawesome as qta
