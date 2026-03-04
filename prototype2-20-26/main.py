@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 
-from menu import MenuWindow
+from home_menu import MenuWindow
 from nav_bar import NavBar
 
 class MainWindow(QMainWindow):
