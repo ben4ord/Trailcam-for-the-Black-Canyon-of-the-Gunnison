@@ -76,12 +76,6 @@ class TrainModel(QMainWindow):
         self.progress_bar.setFormat("0.0%")
         layout.addWidget(self.progress_bar)
 
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setMaximumHeight(120)
-        self.log_view.hide()
-        layout.addWidget(self.log_view)
-
         self.train_btn = QPushButton("Train New Model")
         self.train_btn.clicked.connect(self.train_new_model)
 
@@ -150,7 +144,6 @@ class TrainModel(QMainWindow):
 
         killed = self.session.force_kill()
         if killed:
-            self.log_view.show()
             QMessageBox.warning(
                 self,
                 "Training Force-Stopped",
@@ -168,12 +161,7 @@ class TrainModel(QMainWindow):
             self.debug_view.setPlainText(debug_text)
             self._last_debug_text = debug_text
 
-        log_text = "\n".join(snapshot["log_lines"])
-        if log_text != self._last_log_text:
-            self.log_view.setPlainText(log_text)
-            self._last_log_text = log_text
-        if snapshot["had_error"] or snapshot["log_lines"]:
-            self.log_view.show()
+        self._last_log_text = "\n".join(snapshot["log_lines"])
 
         status = snapshot["status"]
         progress = int(snapshot["progress"])

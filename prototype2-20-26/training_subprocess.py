@@ -144,9 +144,6 @@ def next_experiment_name(project_path: Path, requested_name: str) -> str:
 class StreamParser:
     def __init__(self, epochs: int):
         self._buffer = ""
-        self._configured_epochs = epochs
-        self._epoch_regex = re.compile(r"\b(\d+)\s*/\s*(\d+)\b")
-        self._last_parsed_epoch = None
 
     def write(self, data):
         if not data:
@@ -170,17 +167,7 @@ class StreamParser:
         if "amp:" in lower and "checks" in lower:
             emit("progress", progress=0, status="Running mixed-precision checks...")
 
-        match = self._epoch_regex.search(line)
-        if not match:
-            return
-        current = int(match.group(1))
-        total = int(match.group(2))
-        if 1 <= current <= total <= 10000 and total == self._configured_epochs:
-            if self._last_parsed_epoch != (current, total):
-                self._last_parsed_epoch = (current, total)
-                progress = int((current / max(1, total)) * 10000)
-                progress = max(0, min(10000, progress))
-                emit("progress", progress=progress, status=f"Epoch {current}/{total}")
+        # Epoch/batch status is emitted from callbacks for accurate live progress.
 
 
 class ProgressTracker:
@@ -270,6 +257,30 @@ class ProgressTracker:
                 f"Overall {overall_progress * 100:.1f}% | ETA: {eta_text}"
             ),
         )
+
+    def on_epoch_start(self, trainer):
+        epoch_idx = int(getattr(trainer, "epoch", 0))
+        total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self.configured_epochs)
+        current_epoch = max(1, epoch_idx + 1)
+        self.current_epoch = current_epoch
+        self.last_batch_index = -1
+        self.internal_batch_counter = 0
+        eta_text = self.estimate_eta_text(current_epoch, total_epochs, 0.0)
+        progress = int((current_epoch / max(1, total_epochs)) * 10000)
+        progress = max(0, min(10000, progress))
+        self.last_progress_value = progress
+        emit("progress", progress=progress, status=f"Epoch {current_epoch}/{total_epochs} | ETA: {eta_text}")
+
+    def on_epoch_end(self, trainer):
+        epoch_idx = int(getattr(trainer, "epoch", 0))
+        total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self.configured_epochs)
+        current_epoch = max(1, epoch_idx + 1)
+        self.current_epoch = current_epoch
+        eta_text = self.estimate_eta_text(current_epoch, total_epochs, 1.0)
+        progress = int((current_epoch / max(1, total_epochs)) * 10000)
+        progress = max(0, min(10000, progress))
+        self.last_progress_value = progress
+        emit("progress", progress=progress, status=f"Epoch {current_epoch}/{total_epochs} complete | ETA: {eta_text}")
 
     def on_val_start(self):
         self.val_started_at = time.time()
@@ -378,6 +389,16 @@ def main() -> int:
                 if stop_requested(stop_file):
                     trainer.stop = True
 
+            def on_train_epoch_start(trainer):
+                progress_tracker.on_epoch_start(trainer)
+                if stop_requested(stop_file):
+                    trainer.stop = True
+
+            def on_train_epoch_end(trainer):
+                progress_tracker.on_epoch_end(trainer)
+                if stop_requested(stop_file):
+                    trainer.stop = True
+
             def on_val_start(trainer):
                 progress_tracker.on_val_start()
                 if stop_requested(stop_file):
@@ -391,8 +412,10 @@ def main() -> int:
                     emit("progress", progress=0, status="Stopping training...")
 
             model.add_callback("on_train_start", on_train_start)
+            model.add_callback("on_train_epoch_start", on_train_epoch_start)
             model.add_callback("on_train_batch_end", on_train_batch_end)
             model.add_callback("on_train_batch_start", on_train_batch_end)
+            model.add_callback("on_train_epoch_end", on_train_epoch_end)
             model.add_callback("on_val_start", on_val_start)
             model.add_callback("on_val_end", on_val_end)
 
