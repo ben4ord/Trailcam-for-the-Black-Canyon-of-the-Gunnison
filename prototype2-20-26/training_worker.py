@@ -337,7 +337,7 @@ class TrainingWorker(QObject):
             stream = self._SignalStream(self._handle_train_output_line)
             self.progress_signal.emit(0, "Loading YOLO model...")
 
-            with redirect_stdout(stream), redirect_stderr(stream):
+            with redirect_stdout(stream), redirect_stderr(stream): #type: ignore
                 model = YOLO("yolov8s.pt")
                 self._model = model
                 model.add_callback("on_train_start", self._on_train_start)

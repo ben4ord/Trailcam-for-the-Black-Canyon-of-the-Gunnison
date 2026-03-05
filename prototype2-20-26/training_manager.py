@@ -110,9 +110,6 @@ class TrainingManager:
         source_path = Path(source_path)
         filename = self._build_full_path_name(source_path)
 
-        image_path = self.images_dir / filename
-        label_path = self.labels_dir / f"{Path(filename).stem}.txt"
-
         return filename in self._verified_cache
 
     def unverify_image(self, source_path):

@@ -52,6 +52,7 @@ class ImageLoader(QMainWindow):
         # print(self.labels)
         self.current_index = 0
         self.filter_mode = "all"
+        self.verified = False
 
         # -----------------------------
         # Model / backend logic
@@ -85,7 +86,7 @@ class ImageLoader(QMainWindow):
         layout.setSpacing(0)
 
         self.detection_editor = QListWidget()
-        self.detection_editor.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.detection_editor.setSelectionMode(QAbstractItemView.SingleSelection) #type: ignore
 
         self.detection_editor.currentRowChanged.connect(
             self.on_detection_selected
@@ -387,12 +388,68 @@ class ImageLoader(QMainWindow):
         # Redraw bounding box
         self.update_display()
 
+    def _get_verified_label_path(self, source_path):
+        train_image_path = self.training_manager.generate_train_name(source_path)
+        return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
+
+    def _load_detections_from_label_file(self, image_path, label_path):
+        image = cv2.imread(image_path)
+        if image is None:
+            return []
+
+        img_h, img_w = image.shape[:2]
+        detections = []
+
+        if not label_path.exists():
+            return detections
+
+        for raw_line in label_path.read_text(encoding="utf-8").splitlines():
+            parts = raw_line.strip().split()
+            if len(parts) != 5:
+                continue
+
+            try:
+                class_id = int(parts[0])
+                x_center, y_center, width, height = map(float, parts[1:])
+            except ValueError:
+                continue
+
+            x1 = (x_center - width / 2.0) * img_w
+            y1 = (y_center - height / 2.0) * img_h
+            x2 = (x_center + width / 2.0) * img_w
+            y2 = (y_center + height / 2.0) * img_h
+
+            class_name = (
+                self.labels[class_id]
+                if 0 <= class_id < len(self.labels)
+                else str(class_id)
+            )
+
+            detections.append(
+                {
+                    "class_id": class_id,
+                    "class_name": class_name,
+                    "confidence": 1.0,
+                    "bbox_xyxy": [x1, y1, x2, y2],
+                    "bbox_xywhn": [x_center, y_center, width, height],
+                }
+            )
+
+        return detections
+
     def load_current_image_data(self):
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
-        self.detections = self.labeler.get_detections(path)
-        class_list = self.labels
-        self.populate_detections(self.detections, class_list)
+
+        if self.training_manager.is_verified_cached(path):
+            self.verified = True
+            label_path = self._get_verified_label_path(path)
+            self.detections = self._load_detections_from_label_file(path, label_path)
+        else:
+            self.verified = False
+            self.detections = self.labeler.get_detections(path)
+
+        self.populate_detections(self.detections, self.labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -417,8 +474,6 @@ class ImageLoader(QMainWindow):
         new_id = self.labels.index(new_label)
         self.detections[index]['class_id'] = new_id
 
-       
-        
 
     def update_display(self,yoloBoxes=None,selection=False,Delete=False):
         # Centralized logic to refresh the image label
@@ -426,18 +481,48 @@ class ImageLoader(QMainWindow):
             return
         
         path = self.filtered_images[self.current_index]
-        labeled_image = self.labeler.label_image(path)
-        color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+        if self.verified:
+            image = cv2.imread(path)
+            if image is None:
+                self.image_label.setText("Unable to load image")
+                return
+
+            # Verified images use saved labels, not model inference.
+            for det in self.detections:
+                x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
+                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 6)
+
+                label_text = f"{det['class_name']}"
+                text_y = y1 - 8 if y1 > 12 else y1 + 16
+                cv2.putText(
+                    image,
+                    label_text,
+                    (x1, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.5,
+                    (0, 255, 0),
+                    3,
+                    cv2.LINE_AA,
+                )
+
+            color_correction = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        else:
+            # Unverified images should keep YOLO's native plotting behavior.
+            labeled_image = self.labeler.label_image(path)
+            color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
         # Draw box around users selected object
         if selection and not Delete:
-            color = (0, 255, 0) # Green color (BGR format)
-            thickness = 2
-            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #
+            if self.verified:
+                color = (255, 0, 0) # Green color (BGR format)
+            else:
+                color = (0, 255, 0) # Blue color (BGR format)
+            thickness = 4
+            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
         if len(self.deletion_bounding_box_cords):
             color = (255, 0, 0) # Red color (BGR format)
             thickness = 5
             for box in self.deletion_bounding_box_cords:
-                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness) #
+                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness)
 
 
             
@@ -455,7 +540,7 @@ class ImageLoader(QMainWindow):
         if self.current_index < self.image_list.count():
             self.image_list.setCurrentRow(self.current_index)
 
-        if self.training_manager.is_verified_cached(path):
+        if self.verified:
             self.verification_status.setText("✔ Verified")
             self.verification_status.setStyleSheet("color: green; font-weight: bold;")
             self.verify_image.setEnabled(False)
@@ -473,7 +558,7 @@ class ImageLoader(QMainWindow):
         source = self.filtered_images[self.current_index]
         
         # Return is the image is already verified (doesn't allow a second 'Enter' keypress)
-        if self.training_manager.is_verified_cached(source):
+        if self.verified:
             return
         
         if not self._confirm_action(
