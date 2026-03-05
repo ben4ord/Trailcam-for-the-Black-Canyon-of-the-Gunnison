@@ -8,3 +8,5 @@ verified_images/
 build/*
 select_directory.spec
 runs/
+test_images/
+Models/

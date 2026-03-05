@@ -11,6 +11,7 @@ from PySide6.QtGui import QGuiApplication, QCloseEvent
 
 from training_worker import TrainingWorker
 from nav_bar import NavBar
+from ui_dialogs import confirm_action
 
 
 class TrainModel(QMainWindow):
@@ -18,7 +19,7 @@ class TrainModel(QMainWindow):
         super().__init__()
 
         self.drive = drive
-        self.thread = None
+        self.thread = None #type: ignore
         self.worker = None
         self._shutting_down = False
 
@@ -103,7 +104,14 @@ class TrainModel(QMainWindow):
             self.progress_bar.setRange(0, 10000)
 
     def train_new_model(self):
-        if self.thread and self.thread.isRunning():
+        if self.thread and self.thread.isRunning(): #type: ignore
+            return
+
+        if not confirm_action(
+            self,
+            "Start Training",
+            "Are you sure you want to start training a new model?",
+        ):
             return
 
         cmd = [
@@ -122,19 +130,19 @@ class TrainModel(QMainWindow):
             "name=experiment1"
         ]
 
-        self.thread = QThread()
+        self.thread = QThread() #type: ignore
         self.worker = TrainingWorker(cmd, self.drive)
 
-        self.worker.moveToThread(self.thread)
+        self.worker.moveToThread(self.thread) #type: ignore
 
-        self.thread.started.connect(self.worker.run)
+        self.thread.started.connect(self.worker.run) #type: ignore
 
         self.worker.log_signal.connect(self.append_log)
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.debug_signal.connect(self.update_debug)
         self.worker.finished.connect(self.training_finished)
 
-        self.thread.start()
+        self.thread.start() #type: ignore
 
         self._set_busy_progress()
         self.progress_label.setText("Launching training...")
@@ -150,24 +158,30 @@ class TrainModel(QMainWindow):
 
     def abort_training(self):
         if self.worker:
+            if not confirm_action(
+                self,
+                "Abort Training",
+                "Are you sure you want to abort the current training run?",
+            ):
+                return
             self.worker.stop()
             self.stop_btn.setEnabled(False)
             self.progress_label.setText("Stopping training...")
             self.debug_label.setText("Debug: stop requested from UI.")
 
     def _shutdown_training(self):
-        if not self.thread or not self.thread.isRunning():
+        if not self.thread or not self.thread.isRunning(): #type: ignore
             return
 
         self._shutting_down = True
         if self.worker:
             self.worker.stop()
 
-        self.thread.quit()
-        if not self.thread.wait(5000):
+        self.thread.quit()                                             #type: ignore
+        if not self.thread.wait(5000): #type: ignore
             # Hard-stop as fallback on app/window close.
-            self.thread.terminate()
-            self.thread.wait(2000)
+            self.thread.terminate()                                    #type: ignore
+            self.thread.wait(2000)                                     #type: ignore
 
     # -----------------------------
 
@@ -184,6 +198,7 @@ class TrainModel(QMainWindow):
             or status.startswith("Checking")
             or status.startswith("Loading")
             or status.startswith("Building")
+            or status.startswith("Validating")
             or status.startswith("Training loop started")
             or status.startswith("Releasing")
         )
@@ -214,10 +229,10 @@ class TrainModel(QMainWindow):
 
         if self._shutting_down:
             if self.thread:
-                self.thread.quit()
-                self.thread.wait()
+                self.thread.quit()                          #type: ignore
+                self.thread.wait()                          #type: ignore
             self.worker = None
-            self.thread = None
+            self.thread = None                              #type: ignore
             return
 
         if self.worker and self.worker.had_error:
@@ -250,14 +265,14 @@ class TrainModel(QMainWindow):
             )
 
         if self.thread:
-            self.thread.quit()
-            self.thread.wait()
+            self.thread.quit()                                 #type: ignore
+            self.thread.wait()                                 #type: ignore
         self.worker = None
-        self.thread = None
+        self.thread = None                                     #type: ignore
 
     def menu_window(self):
         self._shutdown_training()
-        from menu import MenuWindow
+        from home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()

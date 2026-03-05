@@ -26,6 +26,7 @@ from model_prediction import ImageLabeler
 from nav_bar import NavBar
 from training_manager import TrainingManager
 from label_editor import LabelEditor
+from ui_dialogs import confirm_action, show_info, show_no_images_popup
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -220,40 +221,6 @@ class ImageLoader(QMainWindow):
         self.show()
 
 
-    # -----------------------------
-    # Helpful UI Functions
-    # -----------------------------
-    def _confirm_action(self, title, message):
-        if not self.confirm_toggle.isChecked():
-            return True
-
-        reply = QMessageBox.question(
-            self,
-            title,
-            message,
-            QMessageBox.Yes | QMessageBox.No # type: ignore
-        )
-
-        return reply == QMessageBox.Yes # type: ignore
-    
-    def _show_info(self, title, message):
-        if not self.confirm_toggle.isChecked():
-            return
-
-        QMessageBox.information(
-            self,
-            title,
-            message
-        )
-
-    def show_no_images_popup(self):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information) # type: ignore
-        msg.setWindowTitle("No Images")
-        msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok) # type: ignore
-        msg.exec()
-
 
     # -----------------------------
     # Image handle functions
@@ -282,9 +249,11 @@ class ImageLoader(QMainWindow):
         if not self.images:
           return
 
-        if not self._confirm_action(
+        if not confirm_action(
+            self,
             "Confirm Image Deletion?",
-            "Delete this image? (This could take a minute)"
+            "Delete this image? (This could take a minute)",
+            self.confirm_toggle.isChecked()
         ):
             return
 
@@ -296,7 +265,8 @@ class ImageLoader(QMainWindow):
         self.get_imgs(self.drive, True)
         self.image_list.takeItem(self.current_index)
 
-        self._show_info(
+        show_info(
+            self,
             "Image Deleted",
             f"Deleted from:\n{file_path}\n"
         )
@@ -306,7 +276,7 @@ class ImageLoader(QMainWindow):
             self.update_display()
         else:
             self.current_index = -1
-            self.show_no_images_popup()
+            show_no_images_popup(self)
 
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
@@ -561,16 +531,19 @@ class ImageLoader(QMainWindow):
         if self.verified:
             return
         
-        if not self._confirm_action(
+        if not confirm_action(
+            self,
             "Confirm Verification",
-            "Verify this image?"
+            "Verify this image?",
+            self.confirm_toggle.isChecked()
         ):
             return
         print(self.detections)
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
-        self._show_info(
+        show_info(
+            self,
             "Verified",
             f"Copied to:\n{new_path.name}\n\nLabel saved:\n{label_path.name}"
         )
@@ -585,9 +558,11 @@ class ImageLoader(QMainWindow):
         if not self.filtered_images:
             return
         
-        if not self._confirm_action(
+        if not confirm_action(
+            self,
             "Confirm Unverify",
-            "Remove verified dataset copy?"
+            "Remove verified dataset copy?",
+            self.confirm_toggle.isChecked()
         ):
             return
 
@@ -596,7 +571,8 @@ class ImageLoader(QMainWindow):
         # Delete verified training dataset copy + label file
         self.training_manager.unverify_image(source)
 
-        self._show_info(
+        show_info(
+            self,
             "Unverified",
             "Image removed from training dataset."
         )
@@ -625,7 +601,7 @@ class ImageLoader(QMainWindow):
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
-            self.show_no_images_popup()
+            show_no_images_popup(self)
             return
 
         return 

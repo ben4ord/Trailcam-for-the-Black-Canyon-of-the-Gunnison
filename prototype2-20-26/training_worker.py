@@ -73,6 +73,9 @@ class TrainingWorker(QObject):
         self._epoch_started = False
         self._last_batch_index = -1
         self._internal_batch_counter = 0
+        self._val_started_at = 0.0
+        self._val_durations = []
+        self._current_epoch = 1
 
     def _parse_str_arg(self, prefix, default):
         for token in self.training_cmd:
@@ -98,6 +101,34 @@ class TrainingWorker(QObject):
         except Exception:
             return value
 
+    def _next_experiment_name(self, requested_name):
+        name = (requested_name or "").strip() or "experiment1"
+        project_dir = self._project_path
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        requested_path = project_dir / name
+        if not requested_path.exists():
+            return name
+
+        match = re.fullmatch(r"^(.*?)(\d+)$", name)
+        if match:
+            prefix = match.group(1)
+            start_index = int(match.group(2))
+        else:
+            prefix = name
+            start_index = 1
+
+        max_index = start_index
+        pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
+        for child in project_dir.iterdir():
+            if not child.is_dir():
+                continue
+            folder_match = pattern.fullmatch(child.name)
+            if folder_match:
+                max_index = max(max_index, int(folder_match.group(1)))
+
+        return f"{prefix}{max_index + 1}"
+
     @staticmethod
     def _format_eta(seconds):
         seconds = max(0, int(seconds))
@@ -120,17 +151,25 @@ class TrainingWorker(QObject):
         if current_epoch >= 1 and total_epochs > 1 and progress == 0:
             progress = 1
 
-        if current_epoch <= 1:
-            eta_text = "calculating..."
-        else:
-            start = self._epoch_timestamps.get(1, now)
-            elapsed = max(0.001, now - start)
-            avg_seconds_per_epoch = elapsed / max(1, current_epoch - 1)
-            remaining = max(0, total_epochs - current_epoch)
-            eta_text = self._format_eta(avg_seconds_per_epoch * remaining)
+        eta_text = self._estimate_eta_text(current_epoch, total_epochs, 0.0)
 
         self._last_progress_value = progress
         self.progress_signal.emit(progress, f"Epoch {current_epoch}/{total_epochs} | ETA: {eta_text}")
+
+    def _estimate_eta_text(self, current_epoch, total_epochs, epoch_fraction):
+        now = time.time()
+        if 1 not in self._epoch_timestamps:
+            self._epoch_timestamps[1] = now
+
+        progress_epochs = (max(1, current_epoch) - 1) + max(0.0, min(1.0, epoch_fraction))
+        if progress_epochs <= 0:
+            return "calculating..."
+
+        start = self._epoch_timestamps.get(1, now)
+        elapsed = max(0.001, now - start)
+        avg_seconds_per_epoch = elapsed / progress_epochs
+        remaining = max(0.0, max(1, total_epochs) - progress_epochs)
+        return self._format_eta(avg_seconds_per_epoch * remaining)
 
     def _emit_batch_progress(self, trainer):
         if not self._running:
@@ -177,6 +216,7 @@ class TrainingWorker(QObject):
         prev_batch_index = self._last_batch_index
         batch_progress = max(0.0, min(1.0, effective_batch / max(1, num_batches)))
         overall_progress = ((current_epoch - 1) + batch_progress) / max(1, total_epochs)
+        eta_text = self._estimate_eta_text(current_epoch, total_epochs, batch_progress)
 
         # Drive bar from per-epoch progress so users see continuous motion.
         progress = int(batch_progress * 10000)
@@ -192,7 +232,7 @@ class TrainingWorker(QObject):
         self._last_progress_value = progress
         self.progress_signal.emit(
             progress,
-            f"Epoch {current_epoch}/{total_epochs} | Batch {effective_batch}/{num_batches} | Overall {overall_progress * 100:.1f}%"
+            f"Epoch {current_epoch}/{total_epochs} | Batch {effective_batch}/{num_batches} | Overall {overall_progress * 100:.1f}% | ETA: {eta_text}"
         )
 
     def _handle_train_output_line(self, line):
@@ -275,6 +315,7 @@ class TrainingWorker(QObject):
         epoch_idx = int(getattr(trainer, "epoch", 0))
         total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self._configured_epochs)
         current_epoch = max(1, epoch_idx + 1)
+        self._current_epoch = current_epoch
         self._last_batch_seen_at = time.time()
         self._batch_seen_debug_emitted = False
         self._last_batch_index = -1
@@ -297,8 +338,62 @@ class TrainingWorker(QObject):
         epoch_idx = int(getattr(trainer, "epoch", 0))
         total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self._configured_epochs)
         current_epoch = max(1, epoch_idx + 1)
+        self._current_epoch = current_epoch
         self._emit_epoch_progress(current_epoch, total_epochs)
         self.debug_signal.emit(f"Debug: epoch completed {current_epoch}/{total_epochs}")
+
+    def _on_val_start(self, trainer):
+        self._trainer = trainer
+        if not self._running:
+            try:
+                trainer.stop = True
+            except Exception:
+                pass
+            self.progress_signal.emit(0, "Stopping training...")
+            return
+
+        self._val_started_at = time.time()
+        total_epochs = self._configured_epochs
+        current_epoch = max(1, min(self._current_epoch, total_epochs))
+        if self._val_durations:
+            avg_seconds = sum(self._val_durations) / len(self._val_durations)
+            eta_text = self._format_eta(avg_seconds)
+            status = f"Validating epoch {current_epoch}/{total_epochs}... (est. {eta_text})"
+        else:
+            status = f"Validating epoch {current_epoch}/{total_epochs}..."
+        self.progress_signal.emit(
+            0,
+            status
+        )
+
+    def _on_val_end(self, trainer):
+        self._trainer = trainer
+        if not self._running:
+            try:
+                trainer.stop = True
+            except Exception:
+                pass
+            self.progress_signal.emit(0, "Stopping training...")
+            return
+
+        total_epochs = self._configured_epochs
+        current_epoch = max(1, min(self._current_epoch, total_epochs))
+        progress = int((min(current_epoch, total_epochs) / max(1, total_epochs)) * 10000)
+        progress = max(0, min(10000, progress))
+        self._last_progress_value = progress
+
+        duration = 0.0
+        if self._val_started_at > 0:
+            duration = max(0.0, time.time() - self._val_started_at)
+            self._val_durations.append(duration)
+            if len(self._val_durations) > 20:
+                self._val_durations = self._val_durations[-20:]
+
+        self.progress_signal.emit(
+            progress,
+            f"Epoch {current_epoch}/{total_epochs} validation complete ({self._format_eta(duration)})"
+        )
+        self.debug_signal.emit(f"Debug: validation stage took {duration:.1f}s")
 
     def run(self):
         self.had_error = False
@@ -315,6 +410,9 @@ class TrainingWorker(QObject):
         self._epoch_started = False
         self._last_batch_index = -1
         self._internal_batch_counter = 0
+        self._val_started_at = 0.0
+        self._val_durations = []
+        self._current_epoch = 1
 
         try:
             self.progress_signal.emit(0, "Checking dataset configuration...")
@@ -329,7 +427,9 @@ class TrainingWorker(QObject):
                         f"Could not find data.yaml in {Path(self.drive)} or {self.base_dir}"
                     )
 
-            save_dir = (self._project_path / self._name).resolve()
+            run_name = self._next_experiment_name(self._name)
+            self._name = run_name
+            save_dir = (self._project_path / run_name).resolve()
             self.debug_signal.emit(
                 f"Debug: epochs={self._configured_epochs}, workers={self._workers}, save_dir={save_dir}"
             )
@@ -345,7 +445,10 @@ class TrainingWorker(QObject):
                 model.add_callback("on_train_batch_end", self._on_train_batch_end)
                 model.add_callback("on_train_epoch_end", self._on_train_epoch_end)
                 model.add_callback("on_train_batch_start", self._on_train_batch_end)
+                model.add_callback("on_val_start", self._on_val_start)
+                model.add_callback("on_val_end", self._on_val_end)
 
+                # check if using cpu or gpu as training device
                 device = self._resolve_device()
                 if device is None: 
                     device = "cpu"
