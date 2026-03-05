@@ -78,6 +78,11 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
+    if "--training-subprocess" in sys.argv:
+        from training_subprocess import main as training_subprocess_main
+
+        sys.exit(training_subprocess_main())
+
     app = QApplication(sys.argv)
     window = MainWindow()
 
