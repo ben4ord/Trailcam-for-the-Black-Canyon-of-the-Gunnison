@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
-
+import shutil
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -616,8 +616,12 @@ class ImageLoader(QMainWindow):
             self.image_label.setText("No images match filter")
     
     def load_labels(self):
+        path = Path.cwd() / "classes.txt"
+        if not path.exists():
+         raise FileNotFoundError(f"{path} not found.")
+
         try:
-            with open("../classes.txt", "r") as file:
+            with open(path, "r") as file:
                 for line in file:
                     self.labels.append(line.strip())
                     print(line)

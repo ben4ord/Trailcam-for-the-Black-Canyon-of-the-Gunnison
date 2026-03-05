@@ -11,12 +11,13 @@ from PySide6.QtGui import QGuiApplication, QCloseEvent
 
 from training_worker import TrainingWorker
 from nav_bar import NavBar
+import torch
+from pathlib import Path
 
 
 class TrainModel(QMainWindow):
-    def __init__(self, drive):
+    def __init__(self,drive):
         super().__init__()
-
         self.drive = drive
         self.thread = None
         self.worker = None
@@ -106,19 +107,25 @@ class TrainModel(QMainWindow):
         if self.thread and self.thread.isRunning():
             return
 
+        data_path = Path.cwd() / "data.yaml"
+        project_path = Path.cwd() / "Models"
+        model_path = Path.cwd() / "yolov8s.pt"
+
+        device = "0" if torch.cuda.is_available() else "cpu"
+
         cmd = [
             sys.executable,
             "-m",
             "ultralytics",
             "train",
-            "model=yolov8s.pt",
-            f"data={self.drive}/data.yaml",
+            f"model={model_path}",
+            f"data={data_path}",
             "epochs=200",
             "imgsz=512",
             "batch=32",
-            "device=0",
+            f"device={device}",
             "patience=15",
-            "project=Models",
+            f"project={project_path}",
             "name=experiment1"
         ]
 
@@ -257,7 +264,7 @@ class TrainModel(QMainWindow):
 
     def menu_window(self):
         self._shutdown_training()
-        from menu import MenuWindow
+        from home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()

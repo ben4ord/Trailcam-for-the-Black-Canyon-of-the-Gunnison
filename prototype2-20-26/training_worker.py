@@ -9,7 +9,6 @@ import gc
 import os
 import re
 
-
 class TrainingWorker(QObject):
     log_signal = Signal(str)
     progress_signal = Signal(int, str)
