@@ -8,12 +8,17 @@ import time
 import gc
 import os
 import re
+import ctypes
+import threading
+
+from training_config import TrainingConfig
 
 
 class TrainingWorker(QObject):
     log_signal = Signal(str)
     progress_signal = Signal(int, str)
     debug_signal = Signal(str)
+    run_dir_signal = Signal(str)
     finished = Signal()
 
     class _SignalStream:
@@ -36,9 +41,9 @@ class TrainingWorker(QObject):
                 self.emit_fn(self._buffer.strip())
             self._buffer = ""
 
-    def __init__(self, training_cmd, drive):
+    def __init__(self, training_config: TrainingConfig, drive):
         super().__init__()
-        self.training_cmd = list(training_cmd or [])
+        self.training_config = training_config
         self.drive = drive
 
         self._running = True
@@ -49,14 +54,15 @@ class TrainingWorker(QObject):
         self.models_dir = self.base_dir / "Models"
         self.models_dir.mkdir(exist_ok=True)
 
-        self._configured_epochs = self._parse_int_arg("epochs=", 200)
-        self._imgsz = self._parse_int_arg("imgsz=", 512)
-        self._batch = self._parse_int_arg("batch=", 32)
-        self._patience = self._parse_int_arg("patience=", 15)
-        self._workers = self._parse_int_arg("workers=", 0)
-        self._project = self._parse_str_arg("project=", "Models")
-        self._name = self._parse_str_arg("name=", "experiment1")
-        self._device = self._parse_device_arg("device=", None)
+        self._model_name = self.training_config.model
+        self._configured_epochs = self.training_config.epochs
+        self._imgsz = self.training_config.imgsz
+        self._batch = self.training_config.batch
+        self._patience = self.training_config.patience
+        self._workers = self.training_config.workers
+        self._project = self.training_config.project
+        self._name = self.training_config.name
+        self._device = self.training_config.device
         self._project_path = Path(self._project)
         if not self._project_path.is_absolute():
             self._project_path = (self.base_dir / self._project_path).resolve()
@@ -76,30 +82,8 @@ class TrainingWorker(QObject):
         self._val_started_at = 0.0
         self._val_durations = []
         self._current_epoch = 1
-
-    def _parse_str_arg(self, prefix, default):
-        for token in self.training_cmd:
-            if isinstance(token, str) and token.startswith(prefix):
-                value = token[len(prefix):].strip()
-                if value:
-                    return value
-        return default
-
-    def _parse_int_arg(self, prefix, default):
-        value = self._parse_str_arg(prefix, str(default))
-        try:
-            return int(value)
-        except Exception:
-            return default
-
-    def _parse_device_arg(self, prefix, default):
-        value = self._parse_str_arg(prefix, "")
-        if value == "":
-            return default
-        try:
-            return int(value)
-        except Exception:
-            return value
+        self._last_save_dir = None
+        self._python_thread_id = None
 
     def _next_experiment_name(self, requested_name):
         name = (requested_name or "").strip() or "experiment1"
@@ -286,10 +270,18 @@ class TrainingWorker(QObject):
 
         return "cpu"
 
+    def _copy_best_weights(self, result_dir: Path) -> bool:
+        source_model = result_dir / "weights" / "best.pt"
+        if not source_model.exists():
+            return False
+        shutil.copy(source_model, self.models_dir / "best.pt")
+        self.debug_signal.emit(f"Debug: copied best weights from {source_model}")
+        return True
+
     def stop(self):
         self._running = False
         self.was_aborted = True
-        self.progress_signal.emit(0, "Stopping training...")
+        self.progress_signal.emit(0, "Stopping training (this may take a while)...")
         self.debug_signal.emit("Debug: abort requested.")
         trainer = self._trainer
         if trainer is not None:
@@ -297,6 +289,27 @@ class TrainingWorker(QObject):
                 trainer.stop = True
             except Exception:
                 pass
+
+    def request_keyboard_interrupt(self) -> bool:
+        if not self._python_thread_id:
+            return False
+        try:
+            result = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_ulong(self._python_thread_id),
+                ctypes.py_object(KeyboardInterrupt),
+            )
+            if result == 0:
+                return False
+            if result > 1:
+                ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    ctypes.c_ulong(self._python_thread_id),
+                    None,
+                )
+                return False
+            self.debug_signal.emit("Debug: injected KeyboardInterrupt into training thread.")
+            return True
+        except Exception:
+            return False
 
     def _on_train_start(self, trainer):
         self._trainer = trainer
@@ -349,7 +362,7 @@ class TrainingWorker(QObject):
                 trainer.stop = True
             except Exception:
                 pass
-            self.progress_signal.emit(0, "Stopping training...")
+            self.progress_signal.emit(0, "Stopping training (this may take a while)...")
             return
 
         self._val_started_at = time.time()
@@ -373,7 +386,7 @@ class TrainingWorker(QObject):
                 trainer.stop = True
             except Exception:
                 pass
-            self.progress_signal.emit(0, "Stopping training...")
+            self.progress_signal.emit(0, "Stopping training (this may take a while)...")
             return
 
         total_epochs = self._configured_epochs
@@ -413,6 +426,8 @@ class TrainingWorker(QObject):
         self._val_started_at = 0.0
         self._val_durations = []
         self._current_epoch = 1
+        self._last_save_dir = None
+        self._python_thread_id = threading.get_ident()
 
         try:
             self.progress_signal.emit(0, "Checking dataset configuration...")
@@ -430,6 +445,8 @@ class TrainingWorker(QObject):
             run_name = self._next_experiment_name(self._name)
             self._name = run_name
             save_dir = (self._project_path / run_name).resolve()
+            self._last_save_dir = save_dir
+            self.run_dir_signal.emit(str(save_dir))
             self.debug_signal.emit(
                 f"Debug: epochs={self._configured_epochs}, workers={self._workers}, save_dir={save_dir}"
             )
@@ -438,7 +455,7 @@ class TrainingWorker(QObject):
             self.progress_signal.emit(0, "Loading YOLO model...")
 
             with redirect_stdout(stream), redirect_stderr(stream): #type: ignore
-                model = YOLO("yolov8s.pt")
+                model = YOLO(self._model_name)
                 self._model = model
                 model.add_callback("on_train_start", self._on_train_start)
                 model.add_callback("on_train_epoch_start", self._on_train_epoch_start)
@@ -478,15 +495,18 @@ class TrainingWorker(QObject):
                         "Debug: no batch callback activity for >120s; training may be stalled in dataloader/augment stage."
                     )
 
+            result_dir = Path(getattr(results, "save_dir", save_dir))
+            self.debug_signal.emit(f"Debug: actual results save_dir={result_dir}")
+            copied_best = self._copy_best_weights(result_dir)
+
             if self.was_aborted:
                 self.progress_signal.emit(0, "Training aborted")
-                self.log_signal.emit("Training aborted by user.")
+                if copied_best:
+                    self.log_signal.emit("Training aborted by user. Best weights were preserved.")
+                else:
+                    self.log_signal.emit("Training aborted by user.")
             else:
-                result_dir = Path(getattr(results, "save_dir", save_dir))
-                self.debug_signal.emit(f"Debug: actual results save_dir={result_dir}")
-                source_model = result_dir / "weights" / "best.pt"
-                if source_model.exists():
-                    shutil.copy(source_model, self.models_dir / "best.pt")
+                if copied_best:
                     self.progress_signal.emit(10000, "Training complete")
                 else:
                     self.had_error = True
@@ -496,15 +516,32 @@ class TrainingWorker(QObject):
         except Exception as exc:
             if self.was_aborted:
                 self.progress_signal.emit(0, "Training aborted")
-                self.log_signal.emit("Training aborted by user.")
+                copied_best = False
+                if self._last_save_dir is not None:
+                    copied_best = self._copy_best_weights(Path(self._last_save_dir))
+                if copied_best:
+                    self.log_signal.emit("Training aborted by user. Best weights were preserved.")
+                else:
+                    self.log_signal.emit("Training aborted by user.")
             else:
                 self.had_error = True
                 self.progress_signal.emit(0, "Training failed")
                 self.log_signal.emit(f"Training failed: {exc}")
                 self.log_signal.emit(traceback.format_exc())
+        except KeyboardInterrupt:
+            self.was_aborted = True
+            self.progress_signal.emit(0, "Training aborted")
+            copied_best = False
+            if self._last_save_dir is not None:
+                copied_best = self._copy_best_weights(Path(self._last_save_dir))
+            if copied_best:
+                self.log_signal.emit("Training interrupted. Best weights were preserved.")
+            else:
+                self.log_signal.emit("Training interrupted.")
         finally:
             self.progress_signal.emit(0, "Releasing GPU resources...")
             self._trainer = None
             self._model = None
+            self._python_thread_id = None
             self._clear_cuda_memory()
             self.finished.emit()

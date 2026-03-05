@@ -1,19 +1,13 @@
 from ultralytics import YOLO
-import os
-import sys
+from pathlib import Path
 import numpy as np
+from app_paths import app_base_dir
 
 
 class ImageLabeler:
     def __init__(self):
-        # Detect if running inside PyInstaller bundle
-        def resource_path(relative_path: str):
-            if hasattr(sys, "_MEIPASS"):
-                return os.path.join(sys._MEIPASS, relative_path) #type: ignore
-            return os.path.join(os.path.abspath("."), relative_path)
-
         # Resolve full model path
-        full_model_path = resource_path("Models/best_3-3-2026.pt")
+        full_model_path = app_base_dir() / Path("Models/best_3-3-2026.pt")
         self.model = YOLO(full_model_path)
 
     def predict(self, image_path: str):

@@ -1,15 +1,16 @@
-import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout,
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel
 )
 
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, QTimer
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication, QCloseEvent
 
 from training_worker import TrainingWorker
+from training_config import TrainingConfig
 from nav_bar import NavBar
 from ui_dialogs import confirm_action
 
@@ -22,6 +23,9 @@ class TrainModel(QMainWindow):
         self.thread = None #type: ignore
         self.worker = None
         self._shutting_down = False
+        self._abort_force_ms = 30000
+        self._forced_abort = False
+        self._current_run_dir = None
 
         self.resize(800, 500)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
@@ -114,24 +118,10 @@ class TrainModel(QMainWindow):
         ):
             return
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "ultralytics",
-            "train",
-            "model=yolov8s.pt",
-            f"data={self.drive}/data.yaml",
-            "epochs=200",
-            "imgsz=512",
-            "batch=32",
-            "device=0",
-            "patience=15",
-            "project=Models",
-            "name=experiment1"
-        ]
+        config = TrainingConfig()
 
         self.thread = QThread() #type: ignore
-        self.worker = TrainingWorker(cmd, self.drive)
+        self.worker = TrainingWorker(config, self.drive)
 
         self.worker.moveToThread(self.thread) #type: ignore
 
@@ -140,6 +130,7 @@ class TrainModel(QMainWindow):
         self.worker.log_signal.connect(self.append_log)
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.debug_signal.connect(self.update_debug)
+        self.worker.run_dir_signal.connect(self._on_run_dir)
         self.worker.finished.connect(self.training_finished)
 
         self.thread.start() #type: ignore
@@ -161,13 +152,67 @@ class TrainModel(QMainWindow):
             if not confirm_action(
                 self,
                 "Abort Training",
-                "Are you sure you want to abort the current training run?",
+                "Are you sure you want to abort the current training run?\nThis may take a while...",
             ):
                 return
             self.worker.stop()
             self.stop_btn.setEnabled(False)
-            self.progress_label.setText("Stopping training...")
+            self.progress_label.setText("Stopping training (this may take a while)...")
             self.debug_label.setText("Debug: stop requested from UI.")
+            QTimer.singleShot(self._abort_force_ms, self._force_stop_if_still_running)
+
+    def _on_run_dir(self, run_dir: str):
+        self._current_run_dir = Path(run_dir)
+
+    def _copy_partial_best_if_available(self) -> bool:
+        if self._current_run_dir is None:
+            return False
+        try:
+            source_model = self._current_run_dir / "weights" / "best.pt"
+            if not source_model.exists():
+                return False
+            destination = Path(__file__).resolve().parent / "Models" / "best.pt"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(source_model.read_bytes())
+            return True
+        except Exception:
+            return False
+
+    def _force_stop_if_still_running(self):
+        if not self.thread or not self.thread.isRunning(): #type: ignore
+            return
+
+        self._forced_abort = True
+        copied = self._copy_partial_best_if_available()
+        if copied:
+            self.append_log("Recovered latest best.pt before force-stop.")
+        else:
+            self.append_log("Force-stop: no best.pt was available to recover yet.")
+
+        injected = False
+        if self.worker:
+            injected = self.worker.request_keyboard_interrupt()
+        if injected:
+            self.debug_label.setText("Debug: timeout reached; sent KeyboardInterrupt to training thread.")
+            self.thread.wait(10000) #type: ignore
+            if not self.thread.isRunning(): #type: ignore
+                self.training_finished()
+                return
+
+        self.debug_label.setText(
+            "Debug: training did not stop after timeout. Unsafe thread termination is disabled."
+        )
+        self.append_log(
+            "Stop timeout reached. Training did not stop yet; continuing to wait for graceful shutdown."
+        )
+        self.log_view.show()
+        self.stop_btn.setEnabled(True)
+        QMessageBox.warning(
+            self,
+            "Stop Delayed",
+            "Training is still shutting down. To avoid crashing the app, forced thread termination is disabled.\n\n"
+            "You can wait a bit longer and press Abort again."
+        )
 
     def _shutdown_training(self):
         if not self.thread or not self.thread.isRunning(): #type: ignore
@@ -224,6 +269,9 @@ class TrainModel(QMainWindow):
     # -----------------------------
 
     def training_finished(self):
+        if self.thread and self.thread.isRunning(): #type: ignore
+            return
+
         self.train_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
 
@@ -248,11 +296,18 @@ class TrainModel(QMainWindow):
             self.progress_bar.setValue(0)
             self.progress_bar.setFormat("0.0%")
             self.progress_label.setText("Training aborted")
-            QMessageBox.information(
-                self,
-                "Training Aborted",
-                "Training was stopped."
-            )
+            if self._forced_abort:
+                QMessageBox.warning(
+                    self,
+                    "Training Force-Stopped",
+                    "Training did not stop gracefully in time and was force-stopped. Best weights were recovered if available."
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Training Aborted",
+                    "Training was stopped."
+                )
         else:
             self._set_determinate_progress()
             self.progress_bar.setValue(10000)
@@ -269,6 +324,8 @@ class TrainModel(QMainWindow):
             self.thread.wait()                                 #type: ignore
         self.worker = None
         self.thread = None                                     #type: ignore
+        self._current_run_dir = None
+        self._forced_abort = False
 
     def menu_window(self):
         self._shutdown_training()

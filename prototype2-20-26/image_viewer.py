@@ -10,11 +10,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
     QLineEdit,
-    QFileDialog,
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
-    QMessageBox,
     QCheckBox,
     QComboBox,
 )
@@ -26,7 +24,9 @@ from model_prediction import ImageLabeler
 from nav_bar import NavBar
 from training_manager import TrainingManager
 from label_editor import LabelEditor
+from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
+from window_utils import pick_directory
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -46,11 +46,11 @@ class ImageLoader(QMainWindow):
         self.detections = []
         self.detection_combos = []
         self.deletion_bounding_box_cords = []
+        self.label_store = LabelStore()
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
         self.load_labels()
-        # print(self.labels)
         self.current_index = 0
         self.filter_mode = "all"
         self.verified = False
@@ -343,7 +343,6 @@ class ImageLoader(QMainWindow):
 
         # Extract coordinates BEFORE removing
         x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
-        print("Deleting box:", x1, y1, x2, y2)
 
         # Remove detection
         self.detections.remove(det)
@@ -445,7 +444,7 @@ class ImageLoader(QMainWindow):
         self.detections[index]['class_id'] = new_id
 
 
-    def update_display(self,yoloBoxes=None,selection=False,Delete=False):
+    def update_display(self, yoloBoxes=None, selection=False):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
@@ -481,7 +480,7 @@ class ImageLoader(QMainWindow):
             labeled_image = self.labeler.label_image(path)
             color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
         # Draw box around users selected object
-        if selection and not Delete:
+        if selection:
             if self.verified:
                 color = (255, 0, 0) # Green color (BGR format)
             else:
@@ -511,7 +510,7 @@ class ImageLoader(QMainWindow):
             self.image_list.setCurrentRow(self.current_index)
 
         if self.verified:
-            self.verification_status.setText("✔ Verified")
+            self.verification_status.setText("Verified")
             self.verification_status.setStyleSheet("color: green; font-weight: bold;")
             self.verify_image.setEnabled(False)
             self.image_label.setStyleSheet("border: 4px solid green;")
@@ -538,7 +537,6 @@ class ImageLoader(QMainWindow):
             self.confirm_toggle.isChecked()
         ):
             return
-        print(self.detections)
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
@@ -547,7 +545,7 @@ class ImageLoader(QMainWindow):
             "Verified",
             f"Copied to:\n{new_path.name}\n\nLabel saved:\n{label_path.name}"
         )
-        self.verification_status.setText("✔ Verified")
+        self.verification_status.setText("Verified")
         self.verification_status.setStyleSheet("color: green; font-weight: bold;")
         self.verify_image.setEnabled(False)
         self.image_label.setStyleSheet("border: 4px solid green;")
@@ -589,7 +587,6 @@ class ImageLoader(QMainWindow):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
         imgs = []
-        # print(f"Getting images from {drive}")
         if os.path.exists(drive):
             for filename in os.listdir(drive):
                 # Check for image extension AND ensure it doesn't start with '.'
@@ -607,9 +604,8 @@ class ImageLoader(QMainWindow):
         return 
     
     def open_dir_dialog(self):
-        dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
+        dir_name = pick_directory(self, "Select a Directory")
         if dir_name:
-            print(f"Entering {dir_name}")
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
@@ -624,7 +620,6 @@ class ImageLoader(QMainWindow):
                 self.image_label.setText("No images found")
             
             self.training_manager = TrainingManager(self.drive)
-            self.training_manager._build_cache()
 
     def menu_window(self):
         from home_menu import MenuWindow
@@ -673,17 +668,12 @@ class ImageLoader(QMainWindow):
         self.load_image_list()
 
         if self.filtered_images:
+            self.load_current_image_data()
             self.update_display()
         else:
             self.image_label.setText("No images match filter")
     
     def load_labels(self):
-        try:
-            with open("../classes.txt", "r") as file:
-                for line in file:
-                    self.labels.append(line.strip())
-                    print(line)
-        except Exception as e:
-            print(e)
+        self.labels = self.label_store.read_labels()
     
 

@@ -1,23 +1,15 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
 
 from image_viewer import ImageLoader
 from nav_bar import NavBar
 from train_model import TrainModel
+from window_utils import center_on_primary_screen
 
 class MenuWindow(QMainWindow):
     def __init__(self,drive):
         super().__init__()
-        # ADD container
         self.drive = drive
-        #self.setGeometry(100, 100, 400, 100)
-        self.setGeometry(
-            QGuiApplication.primaryScreen().availableGeometry().center().x() - self.width() // 2,
-            QGuiApplication.primaryScreen().availableGeometry().center().y() - self.height() // 2,
-            self.width(),
-            self.height()
-        )
 
         self.resize(600, 200)
 
@@ -52,10 +44,7 @@ class MenuWindow(QMainWindow):
         self.trainModel.clicked.connect(self.train_model_window)
         layout.addWidget(self.trainModel, 2, 0, 2, 6)
 
-        # Debugging prints
-        print("Drive received:")
-        print(self.drive)
-        print(self.drive)
+        center_on_primary_screen(self)
         self.show()
 
 

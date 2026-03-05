@@ -1,7 +1,7 @@
 from pathlib import Path
 import shutil
 import re
-import sys
+from app_paths import app_base_dir
 
 class TrainingManager:
     def __init__(self, root_drive):
@@ -9,11 +9,7 @@ class TrainingManager:
 
         # Centralized training set location beside this module.
         # This is for the executable to work properly
-        if getattr(sys, "frozen", False):
-            base_dir = Path(sys.executable).parent
-        else:
-            base_dir = Path(__file__).resolve().parent
-
+        base_dir = app_base_dir()
         self.train_root = base_dir / "verified_images" / "dataset"
 
         self.images_dir = self.train_root / "images"
@@ -36,19 +32,7 @@ class TrainingManager:
         return "-" in name and len(name) <= 5
     
     def _refresh_verified_cache(self):
-        self._verified_cache = {
-            p.name for p in self.images_dir.glob("*")
-        }
-    
-    def _build_cache(self):
-        self._verified_cache.clear()
-
-        if not self.images_dir.exists():
-            return
-
-        for img in self.images_dir.iterdir():
-            if img.is_file():
-                self._verified_cache.add(img.name)
+        self._verified_cache = {p.name for p in self.images_dir.glob("*") if p.is_file()}
 
     # ============================
     # CORE PATH PARSING
@@ -120,14 +104,12 @@ class TrainingManager:
         # Delete image file
         if training_image_path.exists():
             training_image_path.unlink()
-            print(f"Deleted image: {training_image_path}")
 
         # Delete label file
         label_path = self.labels_dir / f"{training_image_path.stem}.txt"
 
         if label_path.exists():
             label_path.unlink()
-            print(f"Deleted label: {label_path}")
 
         self._verified_cache.discard(training_image_path.name)
 

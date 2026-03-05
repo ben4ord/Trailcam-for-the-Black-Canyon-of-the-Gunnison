@@ -8,15 +8,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QLabel,
-    QFileDialog,
     QWidget
 )
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
 
 from home_menu import MenuWindow
 from nav_bar import NavBar
+from window_utils import center_on_primary_screen, pick_directory
 
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
@@ -61,14 +60,13 @@ class MainWindow(QMainWindow):
         self.center_window()
 
     def open_dir_dialog(self):
-        dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
+        dir_name = pick_directory(self, "Select a Directory")
         if dir_name:
             path = Path(dir_name)
             self.dir_name_edit.setText(str(path))
 
     def next_window(self):
         if not self.dir_name_edit.text():
-            print("No drive selected")
             return
 
         self.nextWindow = MenuWindow(self.dir_name_edit.text())
@@ -76,13 +74,7 @@ class MainWindow(QMainWindow):
         self.close()
 
     def center_window(self):
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        window_geometry = self.frameGeometry()
-
-        self.move(
-            screen.center().x() - window_geometry.width() // 2,
-            screen.center().y() - window_geometry.height() // 2
-        )
+        center_on_primary_screen(self)
 
 
 if __name__ == '__main__':
