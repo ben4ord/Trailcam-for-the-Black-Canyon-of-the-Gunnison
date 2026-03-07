@@ -9,7 +9,6 @@ import gc
 import os
 import re
 
-
 class TrainingWorker(QObject):
     log_signal = Signal(str)
     progress_signal = Signal(int, str)
@@ -347,6 +346,9 @@ class TrainingWorker(QObject):
                 model.add_callback("on_train_batch_start", self._on_train_batch_end)
 
                 device = self._resolve_device()
+                if device is None: 
+                    device = "cpu"
+                
                 self.debug_signal.emit(f"Debug: device={device}")
                 self.progress_signal.emit(0, "Building training data...")
 

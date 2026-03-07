@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
-
+import shutil
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -380,7 +380,7 @@ class ImageLoader(QMainWindow):
         # Refresh UI
         self.populate_detections(
             self.detections,
-            list(self.labeler.model.names.values())
+            self.labels
         )
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
@@ -391,8 +391,7 @@ class ImageLoader(QMainWindow):
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
         self.detections = self.labeler.get_detections(path)
-        class_list = list(self.labeler.model.names.values())
-        self.populate_detections(self.detections, class_list)
+        self.populate_detections(self.detections, self.labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -617,8 +616,12 @@ class ImageLoader(QMainWindow):
             self.image_label.setText("No images match filter")
     
     def load_labels(self):
+        path = Path.cwd() / "classes.txt"
+        if not path.exists():
+         raise FileNotFoundError(f"{path} not found.")
+
         try:
-            with open("../classes.txt", "r") as file:
+            with open(path, "r") as file:
                 for line in file:
                     self.labels.append(line.strip())
                     print(line)

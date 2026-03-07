@@ -9,10 +9,7 @@ class TrainingManager:
 
         # Centralized training set location beside this module.
         # This is for the executable to work properly
-        if getattr(sys, "frozen", False):
-            base_dir = Path(sys.executable).parent
-        else:
-            base_dir = Path(__file__).resolve().parent
+        base_dir = Path.cwd()
 
         self.train_root = base_dir / "verified_images" / "dataset"
 
