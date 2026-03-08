@@ -1,8 +1,9 @@
+import os
 import sys
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout,
-    QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QComboBox
 )
 
 from PySide6.QtCore import QThread
@@ -13,6 +14,7 @@ from training_worker import TrainingWorker
 from nav_bar import NavBar
 import torch
 from pathlib import Path
+import qtawesome as qta
 
 
 class TrainModel(QMainWindow):
@@ -81,10 +83,29 @@ class TrainModel(QMainWindow):
         self.log_view.hide()
         layout.addWidget(self.log_view)
 
-        # Buttons
+        # Train Button
         self.train_btn = QPushButton("Train New Model")
         self.train_btn.clicked.connect(self.train_new_model)
 
+        # Model Selector
+        model_row = QHBoxLayout()
+
+        self.model_combo = QComboBox()
+        self.model_combo.currentIndexChanged.connect(self._on_model_selected)
+        model_row.addWidget(self.model_combo)
+
+        self.refresh_btn = QPushButton()
+        self.refresh_btn.setIcon(qta.icon("fa5s.sync-alt"))
+        self.refresh_btn.setFixedSize(30, 30)
+        self.refresh_btn.setToolTip("Refresh model list")
+        self.refresh_btn.clicked.connect(self._populate_model_dropdown)
+        model_row.addWidget(self.refresh_btn)
+
+        layout.addLayout(model_row)
+
+        self._populate_model_dropdown()
+
+        # Stop Button
         self.stop_btn = QPushButton("Abort Training")
         self.stop_btn.clicked.connect(self.abort_training)
         self.stop_btn.setEnabled(False)
@@ -103,6 +124,35 @@ class TrainModel(QMainWindow):
         if self.progress_bar.minimum() == 0 and self.progress_bar.maximum() == 0:
             self.progress_bar.setRange(0, 10000)
 
+    def _populate_model_dropdown(self):
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItem("Train from scratch", userData=None)
+
+        models_dir = os.path.join(os.path.dirname(__file__), "Models")
+        print(f"Looking for models in: {models_dir}")
+        print(f"Directory exists: {os.path.isdir(models_dir)}")
+        if os.path.isdir(models_dir):
+            print(f"Contents: {os.listdir(models_dir)}")
+            for f in sorted(os.listdir(models_dir)):
+                if f.endswith(".pt"):
+                    print(f"Found model file: {f}")
+                    print(f"Models dir path: {models_dir}")
+                    full_path = os.path.join(models_dir, f)
+                    self.model_combo.addItem(f, userData=f) #replace user data with full path if needed
+
+        self.model_combo.blockSignals(False)
+        self._on_model_selected(self.model_combo.currentIndex())
+
+    def _on_model_selected(self, index):
+        selected_txt = self.model_combo.currentText()
+        print(f"Selected model: {self.model_combo.currentData()}")
+        
+        if index == 0:
+            self.train_btn.setText("Train New Model")
+        else:
+            self.train_btn.setText(f"Train Using '{selected_txt}'")
+
     def _get_device(self):
         if torch.cuda.is_available():
             return "0"          # Windows/Linux with NVIDIA GPU
@@ -117,9 +167,7 @@ class TrainModel(QMainWindow):
 
         data_path = Path.cwd() / "data.yaml"
         project_path = Path.cwd() / "Models"
-        model_path = Path.cwd() / "yolov8s.pt"
-
-        device = "0" if torch.cuda.is_available() else "cpu"
+        model_path = Path.cwd() / self.model_combo.currentData() if self.model_combo.currentIndex() != 0 else "yolov8s.pt" #change fallback if needed
 
         cmd = [
             sys.executable,
