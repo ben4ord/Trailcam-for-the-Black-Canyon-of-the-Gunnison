@@ -25,24 +25,24 @@ class LabelStore:
         labels = self.read_labels()
         labels.append(label)
         self.write_labels(labels)
-        self._write_yaml_names(labels)
+        self.write_yaml_names(labels)
 
     def update_label(self, old_label: str, new_label: str) -> None:
         labels = self.read_labels()
         labels = [new_label if value == old_label else value for value in labels]
         self.write_labels(labels)
-        self._write_yaml_names(labels)
+        self.write_yaml_names(labels)
 
     def remove_label(self, label: str) -> None:
         labels = [value for value in self.read_labels() if value != label]
         self.write_labels(labels)
-        self._write_yaml_names(labels)
+        self.write_yaml_names(labels)
 
-    def _write_yaml_names(self, names: list[str]) -> None:
+    def write_yaml_names(self, names: list[str]) -> None:
         if not self.data_yaml_path.exists():
             return
 
-        lines = self.data_yaml_path.read_text(encoding="utf-8").splitlines()
+        lines = self.data_yaml_path.read_text(encoding="utf-8").splitlines() # read in the individual lines from the yaml file
         name_lines = [
             (idx, line)
             for idx, line in enumerate(lines)
@@ -52,10 +52,13 @@ class LabelStore:
             return
 
         new_name_lines = [f"  {idx}: {name}" for idx, name in enumerate(names)]
+
+        # track the first and last index of the names, then we can append to the end
         first_idx = name_lines[0][0]
         last_idx = name_lines[-1][0]
         lines[first_idx:last_idx + 1] = new_name_lines
 
+        # find the nc (number of classes) line and modify the count based on the new number of classes
         for idx, line in enumerate(lines):
             if line.startswith("nc: "):
                 lines[idx] = f"nc: {len(names)}"

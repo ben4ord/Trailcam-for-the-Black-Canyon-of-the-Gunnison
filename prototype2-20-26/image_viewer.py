@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
-import shutil
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -22,11 +21,11 @@ from PySide6.QtCore import Qt
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
-from training_manager import TrainingManager
+from verified_images_manager import TrainingManager
 from label_editor import LabelEditor
 from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
-from window_utils import pick_directory
+from window_utils import pick_directory, center_on_primary_screen
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -218,9 +217,12 @@ class ImageLoader(QMainWindow):
             self.load_current_image_data()
             self.update_display()
 
+        self.center_window()
         self.show()
 
-
+    # Center the window when they open it
+    def center_window(self):
+        center_on_primary_screen(self)
 
     # -----------------------------
     # Image handle functions
@@ -357,12 +359,12 @@ class ImageLoader(QMainWindow):
         # Redraw bounding box
         self.update_display()
 
-    def _get_verified_label_path(self, source_path):
+    def get_verified_label_path(self, source_path):
         """Map source image path to its verified dataset label txt file."""
         train_image_path = self.training_manager.generate_train_name(source_path)
         return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
 
-    def _load_detections_from_label_file(self, image_path, label_path):
+    def load_detections_from_label_file(self, image_path, label_path):
         """Load YOLO txt labels and convert normalized boxes back to pixel boxes."""
         image = cv2.imread(image_path)
         if image is None:
@@ -417,8 +419,8 @@ class ImageLoader(QMainWindow):
         if self.training_manager.is_verified_cached(path):
             # Verified images are ground-truth: prefer saved labels over inference.
             self.verified = True
-            label_path = self._get_verified_label_path(path)
-            self.detections = self._load_detections_from_label_file(path, label_path)
+            label_path = self.get_verified_label_path(path)
+            self.detections = self.load_detections_from_label_file(path, label_path)
         else:
             # Unverified images show current model predictions as a starting point.
             self.verified = False
@@ -448,7 +450,6 @@ class ImageLoader(QMainWindow):
         self.detections[index]['class_name'] = new_label
         new_id = self.labels.index(new_label)
         self.detections[index]['class_id'] = new_id
-
 
     def update_display(self, yoloBoxes=None, selection=False):
         # Centralized logic to refresh the image label
@@ -485,6 +486,7 @@ class ImageLoader(QMainWindow):
             # Unverified images should keep YOLO's native plotting behavior.
             labeled_image = self.labeler.label_image(path)
             color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+        
         # Draw box around users selected object
         if selection:
             if self.verified:
@@ -498,7 +500,6 @@ class ImageLoader(QMainWindow):
             thickness = 5
             for box in self.deletion_bounding_box_cords:
                 cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness)
-
 
             
         pil_image = Image.fromarray(color_correction)
@@ -564,7 +565,7 @@ class ImageLoader(QMainWindow):
         """Remove image/label pair from verified training dataset."""
         if not self.filtered_images:
             return
-        
+
         if not confirm_action(
             self,
             "Confirm Unverify",
@@ -619,6 +620,7 @@ class ImageLoader(QMainWindow):
             self.current_index = 0
             self.drive = str(path)
 
+
             self.get_imgs(self.drive, True)
             self.load_image_list()
 
@@ -627,6 +629,7 @@ class ImageLoader(QMainWindow):
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
+            
             
             self.training_manager = TrainingManager(self.drive)
 
@@ -682,6 +685,7 @@ class ImageLoader(QMainWindow):
         else:
             self.image_label.setText("No images match filter")
     
+
     def load_labels(self): #self.labels = self.label_store.read_labels()
         path = Path.cwd() / "classes.txt"
         if not path.exists():
@@ -695,4 +699,3 @@ class ImageLoader(QMainWindow):
         except Exception as e:
             print(e)
     
-

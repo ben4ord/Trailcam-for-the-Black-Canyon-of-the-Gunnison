@@ -12,7 +12,6 @@ import json
 import os
 import re
 import shutil
-import sys
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import asdict
@@ -49,7 +48,7 @@ class EventWriter:
             "pid": os.getpid(),
             "updated_at": time.time(),
         }
-        self._write_state()
+        self.write_state()
 
     def emit(self, event_type: str, **payload) -> None:
         """Persist one event and fold key fields into the snapshot state."""
@@ -76,9 +75,9 @@ class EventWriter:
                 self.state["status"] = "Training complete"
 
         self.state["updated_at"] = time.time()
-        self._write_state()
+        self.write_state()
 
-    def _write_state(self) -> None:
+    def write_state(self) -> None:
         # Atomic-ish replace prevents partially written JSON if process dies.
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
@@ -133,6 +132,7 @@ def resolve_device(config_device):
     return "cpu"
 
 
+# This grabs the next folder for storing information from the training run
 def next_experiment_name(project_path: Path, requested_name: str) -> str:
     """Generate non-colliding run names (experiment1, experiment2, ...)."""
     name = (requested_name or "").strip() or "experiment1"
@@ -165,23 +165,23 @@ def next_experiment_name(project_path: Path, requested_name: str) -> str:
 class StreamParser:
     def __init__(self, epochs: int):
         # Ultralytics writes carriage-return style progress; normalize to lines.
-        self._buffer = ""
+        self.buffer = ""
 
     def write(self, data):
         """File-like sink used by redirect_stdout/redirect_stderr."""
         if not data:
             return
-        self._buffer += str(data).replace("\r", "\n")
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            self._handle_line(line.rstrip())
+        self.buffer += str(data).replace("\r", "\n")
+        while "\n" in self.buffer:
+            line, self.buffer = self.buffer.split("\n", 1)
+            self.handle_line(line.rstrip())
 
     def flush(self):
-        if self._buffer.strip():
-            self._handle_line(self._buffer.strip())
-        self._buffer = ""
+        if self.buffer.strip():
+            self.handle_line(self.buffer.strip())
+        self.buffer = ""
 
-    def _handle_line(self, line: str):
+    def handle_line(self, line: str):
         """Translate selected library log lines into friendlier UI statuses."""
         if not line:
             return

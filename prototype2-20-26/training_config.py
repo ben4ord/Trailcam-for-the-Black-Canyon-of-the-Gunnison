@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
 
+# Eventually this will be modified to have the model passed in be dynamic based on the user selected model dropdown
+
 @dataclass(slots=True)
 class TrainingConfig:
     """Serializable training hyperparameters passed to training_subprocess.
