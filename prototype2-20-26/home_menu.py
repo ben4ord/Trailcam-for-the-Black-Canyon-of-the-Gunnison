@@ -24,6 +24,8 @@ class MenuWindow(QMainWindow):
             new_folder=True
         )
 
+        self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
+
         # central widget
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
@@ -60,4 +62,7 @@ class MenuWindow(QMainWindow):
         self.imageWindow.show()
         self.close()
 
+    def open_dir_dialog(self):
+        from window_utils import pick_directory
+        self.drive = pick_directory(self)
         

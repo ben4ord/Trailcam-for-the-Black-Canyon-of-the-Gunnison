@@ -14,9 +14,6 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication, QCloseEvent
-
 from nav_bar import NavBar
 import torch
 import qtawesome as qta

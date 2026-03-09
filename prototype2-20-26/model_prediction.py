@@ -3,7 +3,7 @@
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
-from pathlib import Path
+
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
