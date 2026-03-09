@@ -1,4 +1,9 @@
-import sys
+"""Training UI window that controls and monitors the background trainer.
+
+This window never runs YOLO training directly. It talks to `TrainingSession`,
+which launches `training_subprocess.py` and exposes a polling snapshot API.
+"""
+
 import os
 
 from PySide6.QtCore import Qt, QTimer
@@ -9,14 +14,11 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
-from PySide6.QtCore import QThread
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication, QCloseEvent
 
-from training_worker import TrainingWorker
 from nav_bar import NavBar
 import torch
-from pathlib import Path
 import qtawesome as qta
 from training_config import TrainingConfig
 from training_session import get_training_session
@@ -27,6 +29,7 @@ class TrainModel(QMainWindow):
     def __init__(self,drive):
         super().__init__()
         self.drive = drive
+        # Shared singleton keeps run state consistent across reopened windows.
         self.session = get_training_session()
         self._abort_force_ms = 180000 # 3 minutes
         self._last_completion_counter = -1
@@ -119,20 +122,24 @@ class TrainModel(QMainWindow):
         layout.addWidget(self.stop_btn)
 
         self.refresh_timer = QTimer(self)
+        # UI polls snapshot every 500 ms to mirror subprocess state in near real time.
         self.refresh_timer.setInterval(500)
         self.refresh_timer.timeout.connect(self.refresh_session_ui)
         self.refresh_timer.start()
         self.refresh_session_ui()
 
     def _set_busy_progress(self):
+        """Switch to indeterminate mode for setup/teardown stages."""
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setFormat("Working...")
 
     def _set_determinate_progress(self):
+        """Restore normal fixed-range mode for percent-based progress."""
         if self.progress_bar.minimum() == 0 and self.progress_bar.maximum() == 0:
             self.progress_bar.setRange(0, 10000)
 
     def _populate_model_dropdown(self):
+        """Populate available checkpoint files from local `Models/` folder."""
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
         self.model_combo.addItem("Train from scratch", userData=None)
@@ -147,12 +154,14 @@ class TrainModel(QMainWindow):
                     print(f"Found model file: {f}")
                     print(f"Models dir path: {models_dir}")
                     full_path = os.path.join(models_dir, f)
+                    # Keep file name in userData; training config resolves path later.
                     self.model_combo.addItem(f, userData=f) #replace user data with full path if needed
 
         self.model_combo.blockSignals(False)
         self._on_model_selected(self.model_combo.currentIndex())
 
     def _on_model_selected(self, index):
+        """Update primary action text to reflect selected base model."""
         selected_txt = self.model_combo.currentText()
         print(f"Selected model: {self.model_combo.currentData()}")
         
@@ -162,6 +171,7 @@ class TrainModel(QMainWindow):
             self.train_btn.setText(f"Train Using '{selected_txt}'")
 
     def _get_device(self):
+        """Legacy helper kept for reference if manual device controls are re-added."""
         if torch.cuda.is_available():
             return "0"          # Windows/Linux with NVIDIA GPU
         elif torch.backends.mps.is_available():
@@ -170,6 +180,7 @@ class TrainModel(QMainWindow):
             return "cpu"        # Fallback
 
     def train_new_model(self):
+        """Confirm and launch a new training run via TrainingSession."""
         if not confirm_action(
             self,
             "Start Training",
@@ -188,6 +199,7 @@ class TrainModel(QMainWindow):
         self.refresh_session_ui()
 
     def abort_training(self):
+        """Request graceful stop and schedule hard-stop timeout fallback."""
         snapshot = self.session.snapshot()
         if not snapshot["running"]:
             return
@@ -207,6 +219,7 @@ class TrainModel(QMainWindow):
         QTimer.singleShot(self._abort_force_ms, self._force_kill_if_still_running)
 
     def _force_kill_if_still_running(self):
+        """Force kill training process if it ignores graceful stop request."""
         snapshot = self.session.snapshot()
         if not snapshot["running"]:
             return
@@ -221,6 +234,7 @@ class TrainModel(QMainWindow):
             )
 
     def refresh_session_ui(self):
+        """Pull latest session snapshot and refresh progress/log controls."""
         snapshot = self.session.snapshot()
         was_running = self._prev_running
         self._prev_running = snapshot["running"]
@@ -234,6 +248,7 @@ class TrainModel(QMainWindow):
 
         status = snapshot["status"]
         progress = int(snapshot["progress"])
+        # Status prefixes that indicate non-determinate phases.
         is_setup_status = (
             status.startswith("Preparing")
             or status.startswith("Starting epoch")
@@ -247,6 +262,7 @@ class TrainModel(QMainWindow):
             or status.startswith("Launching")
         )
 
+        # Show spinner while worker is active but no meaningful percent exists yet.
         if snapshot["running"] and progress <= 0 and is_setup_status:
             self._set_busy_progress()
         else:
@@ -264,6 +280,7 @@ class TrainModel(QMainWindow):
 
         current_counter = int(snapshot["completion_counter"])
         if current_counter != self._last_completion_counter:
+            # Counter increments once at each terminal state transition.
             self._last_completion_counter = current_counter
             if current_counter <= 0:
                 return
@@ -293,10 +310,12 @@ class TrainModel(QMainWindow):
                 )
 
     def copy_debug_logs(self):
+        """Copy debug log view to clipboard for quick sharing."""
         QGuiApplication.clipboard().setText(self.debug_view.toPlainText())
         self.debug_label.setText("Debug: logs copied to clipboard.")
 
     def menu_window(self):
+        """Navigate back to home menu."""
         from home_menu import MenuWindow
 
         self.menuWindow = MenuWindow(self.drive)
@@ -304,5 +323,6 @@ class TrainModel(QMainWindow):
         self.close()
 
     def closeEvent(self, event: QCloseEvent):
+        """Stop polling timer on window close."""
         self.refresh_timer.stop()
         event.accept()

@@ -358,10 +358,12 @@ class ImageLoader(QMainWindow):
         self.update_display()
 
     def _get_verified_label_path(self, source_path):
+        """Map source image path to its verified dataset label txt file."""
         train_image_path = self.training_manager.generate_train_name(source_path)
         return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
 
     def _load_detections_from_label_file(self, image_path, label_path):
+        """Load YOLO txt labels and convert normalized boxes back to pixel boxes."""
         image = cv2.imread(image_path)
         if image is None:
             return []
@@ -383,6 +385,7 @@ class ImageLoader(QMainWindow):
             except ValueError:
                 continue
 
+            # Convert YOLO normalized center/size to image-space corner coordinates.
             x1 = (x_center - width / 2.0) * img_w
             y1 = (y_center - height / 2.0) * img_h
             x2 = (x_center + width / 2.0) * img_w
@@ -407,14 +410,17 @@ class ImageLoader(QMainWindow):
         return detections
 
     def load_current_image_data(self):
+        """Load detections from verified labels or live model inference."""
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
 
         if self.training_manager.is_verified_cached(path):
+            # Verified images are ground-truth: prefer saved labels over inference.
             self.verified = True
             label_path = self._get_verified_label_path(path)
             self.detections = self._load_detections_from_label_file(path, label_path)
         else:
+            # Unverified images show current model predictions as a starting point.
             self.verified = False
             self.detections = self.labeler.get_detections(path)
 
@@ -521,6 +527,7 @@ class ImageLoader(QMainWindow):
             self.image_label.setStyleSheet("")
     
     def mark_verified(self):
+        """Persist current detections as YOLO labels in the training dataset."""
         if not self.filtered_images:
             return
         
@@ -537,6 +544,7 @@ class ImageLoader(QMainWindow):
             self.confirm_toggle.isChecked()
         ):
             return
+        # Convert edited detections to YOLO txt lines before writing to dataset.
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
@@ -553,6 +561,7 @@ class ImageLoader(QMainWindow):
         self.next_image() # automatically scroll to next image (less button clicking)
 
     def unverify_image(self):
+        """Remove image/label pair from verified training dataset."""
         if not self.filtered_images:
             return
         

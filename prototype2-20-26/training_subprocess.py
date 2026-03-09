@@ -1,3 +1,11 @@
+"""Detached worker process that runs YOLO training and streams UI events.
+
+The GUI does not train directly. It launches this script with file paths for:
+- a state snapshot JSON (`training_state.json`)
+- an append-only event stream (`training_events.jsonl`)
+- a stop flag file used for graceful cancellation
+"""
+
 import argparse
 import gc
 import json
@@ -17,6 +25,12 @@ from training_config import TrainingConfig
 
 
 class EventWriter:
+    """Write both event stream updates and current-state snapshots.
+
+    Events are append-only for logs/debug progress, while `state` is the latest
+    consolidated view that polling UIs can read quickly.
+    """
+
     def __init__(self, state_path: Path, events_path: Path):
         self.state_path = state_path
         self.events_path = events_path
@@ -38,6 +52,7 @@ class EventWriter:
         self._write_state()
 
     def emit(self, event_type: str, **payload) -> None:
+        """Persist one event and fold key fields into the snapshot state."""
         event = {"type": event_type, "ts": time.time(), **payload}
         with self.events_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event) + "\n")
@@ -64,6 +79,7 @@ class EventWriter:
         self._write_state()
 
     def _write_state(self) -> None:
+        # Atomic-ish replace prevents partially written JSON if process dies.
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
         tmp.replace(self.state_path)
@@ -73,15 +89,18 @@ WRITER = None
 
 
 def emit(event_type: str, **payload) -> None:
+    """Safe global event helper used throughout the subprocess."""
     if WRITER is not None:
         WRITER.emit(event_type, **payload)
 
 
 def stop_requested(stop_file: Path) -> bool:
+    """Stop signal is represented by existence of a shared flag file."""
     return stop_file.exists()
 
 
 def clear_cuda_memory() -> None:
+    """Best-effort release of CUDA memory so sequential runs are stable."""
     try:
         import torch
 
@@ -95,6 +114,7 @@ def clear_cuda_memory() -> None:
 
 
 def resolve_device(config_device):
+    """Resolve training device using config override, env var, then auto-detect."""
     if config_device is not None:
         return config_device
 
@@ -114,6 +134,7 @@ def resolve_device(config_device):
 
 
 def next_experiment_name(project_path: Path, requested_name: str) -> str:
+    """Generate non-colliding run names (experiment1, experiment2, ...)."""
     name = (requested_name or "").strip() or "experiment1"
     project_path.mkdir(parents=True, exist_ok=True)
 
@@ -143,9 +164,11 @@ def next_experiment_name(project_path: Path, requested_name: str) -> str:
 
 class StreamParser:
     def __init__(self, epochs: int):
+        # Ultralytics writes carriage-return style progress; normalize to lines.
         self._buffer = ""
 
     def write(self, data):
+        """File-like sink used by redirect_stdout/redirect_stderr."""
         if not data:
             return
         self._buffer += str(data).replace("\r", "\n")
@@ -159,6 +182,7 @@ class StreamParser:
         self._buffer = ""
 
     def _handle_line(self, line: str):
+        """Translate selected library log lines into friendlier UI statuses."""
         if not line:
             return
         lower = line.lower()
@@ -172,6 +196,7 @@ class StreamParser:
 
 class ProgressTracker:
     def __init__(self, epochs: int):
+        # Keep lightweight timing/position signals for ETA + progress display.
         self.configured_epochs = epochs
         self.epoch_timestamps = {}
         self.last_progress_value = -1
@@ -183,6 +208,7 @@ class ProgressTracker:
 
     @staticmethod
     def format_eta(seconds: float) -> str:
+        """Render ETA in compact human-readable format."""
         seconds = max(0, int(seconds))
         hours, remainder = divmod(seconds, 3600)
         minutes, secs = divmod(remainder, 60)
@@ -193,6 +219,7 @@ class ProgressTracker:
         return f"{secs}s"
 
     def estimate_eta_text(self, current_epoch: int, total_epochs: int, epoch_fraction: float) -> str:
+        """Estimate remaining time from average epoch throughput so far."""
         now = time.time()
         if 1 not in self.epoch_timestamps:
             self.epoch_timestamps[1] = now
@@ -208,6 +235,7 @@ class ProgressTracker:
         return self.format_eta(avg_seconds_per_epoch * remaining)
 
     def emit_batch_progress(self, trainer):
+        """Emit high-frequency progress updates during training batches."""
         epoch_idx = int(getattr(trainer, "epoch", 0))
         total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self.configured_epochs)
         current_epoch = max(1, epoch_idx + 1)
@@ -216,6 +244,7 @@ class ProgressTracker:
         batch_i = int(getattr(trainer, "batch_i", -1))
         num_batches = int(getattr(trainer, "nb", 0) or 0)
         if num_batches <= 0:
+            # Fallback for versions where `nb` is not populated.
             try:
                 train_loader = getattr(trainer, "train_loader", None)
                 if train_loader is not None:
@@ -226,11 +255,13 @@ class ProgressTracker:
             return
 
         if batch_i < 0:
+            # Some callback contexts do not expose batch index; approximate.
             self.internal_batch_counter += 1
             effective_batch = min(self.internal_batch_counter, num_batches)
         else:
             effective_batch = max(1, min(batch_i + 1, num_batches))
             if effective_batch <= self.last_batch_index:
+                # Guard against callback ordering duplicates/regressions.
                 self.internal_batch_counter += 1
                 effective_batch = min(max(effective_batch, self.internal_batch_counter), num_batches)
 
@@ -245,6 +276,7 @@ class ProgressTracker:
             progress = 1
 
         if progress == self.last_progress_value and effective_batch == prev_batch_index:
+            # Skip duplicate events to reduce UI churn.
             return
 
         self.last_batch_index = effective_batch
@@ -259,6 +291,7 @@ class ProgressTracker:
         )
 
     def on_epoch_start(self, trainer):
+        """Emit coarse progress when an epoch starts."""
         epoch_idx = int(getattr(trainer, "epoch", 0))
         total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self.configured_epochs)
         current_epoch = max(1, epoch_idx + 1)
@@ -272,6 +305,7 @@ class ProgressTracker:
         emit("progress", progress=progress, status=f"Epoch {current_epoch}/{total_epochs} | ETA: {eta_text}")
 
     def on_epoch_end(self, trainer):
+        """Emit coarse progress when an epoch completes."""
         epoch_idx = int(getattr(trainer, "epoch", 0))
         total_epochs = int(getattr(getattr(trainer, "args", None), "epochs", 0) or self.configured_epochs)
         current_epoch = max(1, epoch_idx + 1)
@@ -283,6 +317,7 @@ class ProgressTracker:
         emit("progress", progress=progress, status=f"Epoch {current_epoch}/{total_epochs} complete | ETA: {eta_text}")
 
     def on_val_start(self):
+        """Emit validation-start status, optionally with duration estimate."""
         self.val_started_at = time.time()
         total_epochs = self.configured_epochs
         current_epoch = max(1, min(self.current_epoch, total_epochs))
@@ -295,6 +330,7 @@ class ProgressTracker:
         emit("progress", progress=0, status=status)
 
     def on_val_end(self):
+        """Emit validation completion and update rolling validation timings."""
         total_epochs = self.configured_epochs
         current_epoch = max(1, min(self.current_epoch, total_epochs))
         progress = int((min(current_epoch, total_epochs) / max(1, total_epochs)) * 10000)
@@ -315,6 +351,7 @@ class ProgressTracker:
 
 
 def try_copy_best(run_dir: Path, base_dir: Path) -> bool:
+    """Copy run weights to the canonical model location used by prediction."""
     source = run_dir / "weights" / "best.pt"
     if not source.exists():
         return False
@@ -326,6 +363,7 @@ def try_copy_best(run_dir: Path, base_dir: Path) -> bool:
 
 
 def parse_args():
+    """CLI contract used by training_session when launching subprocess."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--drive", required=True)
     parser.add_argument("--stop-file", required=True)
@@ -336,6 +374,7 @@ def parse_args():
 
 
 def main() -> int:
+    """Execute one training run and report status through event/state files."""
     global WRITER
     args = parse_args()
     base_dir = app_base_dir()
@@ -350,12 +389,14 @@ def main() -> int:
     copied_best = False
     run_dir = None
 
+    # Record resolved config for troubleshooting mismatched runs.
     emit("debug", text=f"Debug: subprocess config={asdict(config)}")
 
     try:
         emit("progress", progress=0, status="Checking dataset configuration...")
         data_path = Path(args.drive) / "data.yaml"
         if not data_path.exists():
+            # Fallback supports packaged app runs where dataset yaml lives by app.
             fallback = base_dir / "data.yaml"
             if fallback.exists():
                 data_path = fallback
@@ -368,6 +409,7 @@ def main() -> int:
         if not project_path.is_absolute():
             project_path = (base_dir / project_path).resolve()
 
+        # Avoid clobbering prior runs with same user-requested name.
         run_name = next_experiment_name(project_path, config.name)
         run_dir = (project_path / run_name).resolve()
         emit("run_dir", path=str(run_dir))
@@ -376,15 +418,18 @@ def main() -> int:
         progress_tracker = ProgressTracker(config.epochs)
         emit("progress", progress=0, status="Loading YOLO model...")
 
-        with redirect_stdout(parser_stream), redirect_stderr(parser_stream):
+        # Route Ultralytics stdout/stderr through parser so UI can show key stages.
+        with redirect_stdout(parser_stream), redirect_stderr(parser_stream):  # type: ignore
             model = YOLO(config.model)
 
             def on_train_start(trainer):
+                # First callback confirms trainer loop is active.
                 emit("progress", progress=0, status="Training loop started...")
                 if stop_requested(stop_file):
                     trainer.stop = True
 
             def on_train_batch_end(trainer):
+                # Batch updates produce smoother progress than epoch-only updates.
                 progress_tracker.emit_batch_progress(trainer)
                 if stop_requested(stop_file):
                     trainer.stop = True
@@ -411,9 +456,11 @@ def main() -> int:
                     trainer.stop = True
                     emit("progress", progress=0, status="Stopping training...")
 
+            # Register lifecycle callbacks before invoking model.train.
             model.add_callback("on_train_start", on_train_start)
             model.add_callback("on_train_epoch_start", on_train_epoch_start)
             model.add_callback("on_train_batch_end", on_train_batch_end)
+            # Also hook batch-start to capture progress for versions with sparse end events.
             model.add_callback("on_train_batch_start", on_train_batch_end)
             model.add_callback("on_train_epoch_end", on_train_epoch_end)
             model.add_callback("on_val_start", on_val_start)
@@ -423,6 +470,7 @@ def main() -> int:
             emit("debug", text=f"Debug: device={device}")
             emit("progress", progress=0, status="Building training data...")
 
+            # YOLO handles dataloader build + training loop + validation internally.
             results = model.train(
                 data=str(data_path),
                 epochs=config.epochs,
@@ -438,6 +486,7 @@ def main() -> int:
             )
             parser_stream.flush()
 
+        # save_dir can vary by Ultralytics version; fallback to planned run_dir.
         result_dir = Path(getattr(results, "save_dir", run_dir))
         copied_best = try_copy_best(result_dir, base_dir)
         was_aborted = stop_requested(stop_file)
@@ -457,6 +506,7 @@ def main() -> int:
                 emit("log", text=f"Training ended, but best.pt was not found in: {result_dir}")
 
     except KeyboardInterrupt:
+        # Handles Ctrl+C and similar interrupts cleanly.
         was_aborted = True
         emit("progress", progress=0, status="Training aborted")
         if run_dir is not None:
@@ -466,6 +516,7 @@ def main() -> int:
         else:
             emit("log", text="Training interrupted.")
     except Exception as exc:
+        # Distinguish user-requested stop from genuine runtime failures.
         if stop_requested(stop_file):
             was_aborted = True
             emit("progress", progress=0, status="Training aborted")
@@ -480,6 +531,7 @@ def main() -> int:
             emit("progress", progress=0, status="Training failed")
             emit("log", text=f"Training failed: {exc}")
     finally:
+        # Always publish terminal state and cleanup stop flag for next run.
         emit("progress", progress=0, status="Releasing GPU resources...")
         clear_cuda_memory()
         emit(

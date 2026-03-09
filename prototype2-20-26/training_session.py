@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""Coordinate one background YOLO training run for the GUI process.
+
+The UI launches `training_subprocess.py` and then reads two shared files:
+- `training_state.json`: latest full state snapshot
+- `training_events.jsonl`: append-only event stream for logs/debug/run-dir
+"""
+
 import json
 import os
 import signal
@@ -15,17 +22,21 @@ from training_config import TrainingConfig
 
 
 class TrainingSession:
+    """Thread-safe controller for starting/stopping and monitoring training."""
+
     def __init__(self):
         self._lock = threading.Lock()
         self.base_dir = app_base_dir()
         self.runtime_dir = self.base_dir / "runtime"
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
 
+        # Assigning files to these variables for future use
         self.state_file = self.runtime_dir / "training_state.json"
         self.events_file = self.runtime_dir / "training_events.jsonl"
         self.stop_file = self.runtime_dir / "training_stop.flag"
         self.launch_log_file = self.runtime_dir / "training_launcher.log"
 
+        # In-memory values of persisted training state.
         self._progress = 0
         self._status = "Idle"
         self._debug_lines = []
@@ -43,6 +54,7 @@ class TrainingSession:
         self._rehydrate_from_disk()
 
     def start(self, drive: str, config: TrainingConfig) -> tuple[bool, str]:
+        """Start a detached training subprocess if no run is active."""
         with self._lock:
             self._refresh_from_disk_locked()
             if self._running:
@@ -50,6 +62,7 @@ class TrainingSession:
 
             self._reset_state_locked(drive)
 
+            # Ensure the next run starts from clean event/stop files.
             if self.events_file.exists():
                 self.events_file.unlink()
             self.stop_file.unlink(missing_ok=True)
@@ -73,6 +86,7 @@ class TrainingSession:
                     | subprocess.CREATE_NO_WINDOW
                 )  # type: ignore[attr-defined]
                 kwargs["startupinfo"] = startupinfo
+                # Avoid leaking file handles into detached child process.
                 kwargs["close_fds"] = True
             else:
                 kwargs["start_new_session"] = True
@@ -88,6 +102,7 @@ class TrainingSession:
             return True, "Training started."
 
     def request_stop(self) -> None:
+        # Ask subprocess callbacks to exit gracefully via stop-file signal.
         with self._lock:
             self._refresh_from_disk_locked()
             if not self._running:
@@ -97,11 +112,13 @@ class TrainingSession:
             self._append_debug_locked("Debug: abort requested from UI.")
 
     def force_kill(self) -> bool:
+        # Hard-stop subprocess when graceful stop does not finish in time.
         with self._lock:
             self._refresh_from_disk_locked()
             if not self._running or not self._pid:
                 return False
 
+            # Try to preserve best.pt before process termination.
             self._recover_partial_best_locked()
             self._append_log_locked("Force-stopping training subprocess.")
             self._append_debug_locked("Debug: terminating training subprocess.")
@@ -121,6 +138,7 @@ class TrainingSession:
             return True
 
     def snapshot(self) -> dict:
+        # Return the latest merged state for UI polling.
         with self._lock:
             self._refresh_from_disk_locked()
             return {
@@ -137,6 +155,7 @@ class TrainingSession:
             }
 
     def _build_launch_command(self, drive: str, config: TrainingConfig) -> list[str]:
+        # Build launch command for frozen app mode or source-script mode.
         config_json = json.dumps(asdict(config))
         bg_python = self._background_python_executable()
 
@@ -172,6 +191,7 @@ class TrainingSession:
         ]
 
     def _background_python_executable(self) -> str:
+        # Prefer pythonw.exe when possible to suppress a console window.
         if getattr(sys, "frozen", False):
             return sys.executable
 
@@ -183,15 +203,18 @@ class TrainingSession:
         return str(exe)
 
     def _rehydrate_from_disk(self):
+        # Load persisted state during session initialization.
         with self._lock:
             self._refresh_from_disk_locked()
 
     def _refresh_from_disk_locked(self):
+        # Event stream can carry lines that are not duplicated in full state.
         self._load_events_locked()
         self._load_state_locked()
         self._resolve_stale_running_locked()
 
     def _load_state_locked(self):
+        # Merge latest JSON snapshot when it is newer than our cached copy.
         if not self.state_file.exists():
             return
         try:
@@ -203,6 +226,7 @@ class TrainingSession:
         if updated_at < self._last_updated_at:
             return
 
+        # Setting a ton of variables based on status
         self._last_updated_at = updated_at
         self._running = bool(state.get("running", self._running))
         self._progress = int(state.get("progress", self._progress))
@@ -217,6 +241,7 @@ class TrainingSession:
         self._pid = int(pid) if pid else None
 
     def _load_events_locked(self):
+        # Read newly appended JSONL events starting at last file offset.
         if not self.events_file.exists():
             return
         try:
@@ -232,9 +257,11 @@ class TrainingSession:
             return
 
     def _handle_event_locked(self, line: str):
+        # Apply one event line to local debug/log/run_dir caches.
         try:
             event = json.loads(line)
         except Exception:
+            # Keep malformed lines visible for troubleshooting.
             self._append_log_locked(line)
             return
 
@@ -248,6 +275,7 @@ class TrainingSession:
             self._run_dir = Path(path) if path else None
 
     def _resolve_stale_running_locked(self):
+        # Mark run as failed if PID died without a clean terminal status.
         if not self._running or not self._pid:
             return
         if self._is_pid_alive(self._pid):
@@ -262,6 +290,7 @@ class TrainingSession:
             self._completion_counter += 1
 
     def _is_pid_alive(self, pid: int) -> bool:
+        # Cross-platform process liveness check used by stale-run detection.
         try:
             if os.name == "nt":
                 result = subprocess.run(
@@ -283,6 +312,7 @@ class TrainingSession:
             return False
 
     def _reset_state_locked(self, drive: str):
+        # Reset in-memory fields before launching a new subprocess run.
         self._progress = 0
         self._status = "Launching training..."
         self._debug_lines = []
@@ -297,6 +327,7 @@ class TrainingSession:
         self._last_updated_at = 0.0
 
     def _write_boot_state_locked(self):
+        # Persist immediate post-launch state for quick UI attachment.
         state = {
             "running": self._running,
             "progress": self._progress,
@@ -312,6 +343,7 @@ class TrainingSession:
         self.state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
     def _append_log_locked(self, text: str):
+        # Append user-facing log text with a bounded history.
         if not text:
             return
         self._log_lines.append(text)
@@ -319,6 +351,7 @@ class TrainingSession:
             self._log_lines = self._log_lines[-2000:]
 
     def _append_debug_locked(self, text: str):
+        # Append debug text with a bounded history.
         if not text:
             return
         self._debug_lines.append(text)
@@ -326,6 +359,7 @@ class TrainingSession:
             self._debug_lines = self._debug_lines[-2000:]
 
     def _recover_partial_best_locked(self) -> bool:
+        # Copy partial run `best.pt` into Models/ before forced termination.
         if self._run_dir is None:
             return False
         try:

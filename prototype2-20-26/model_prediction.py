@@ -1,3 +1,5 @@
+"""Prediction helpers wrapping Ultralytics YOLO outputs for the GUI layer."""
+
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
@@ -6,17 +8,21 @@ class ImageLabeler:
     def __init__(self):
         # Resolve full model path
         full_model_path = Path.cwd() /"Models/best_3-3-2026.pt"
+        # Model is loaded once so repeated image predictions are fast.
         self.model = YOLO(full_model_path)
 
     def predict(self, image_path: str):
+        """Run inference and return first result object for a single image path."""
         results = self.model(image_path, verbose=False)
         return results[0]
 
    
     def label_image(self, image_path: str) -> np.ndarray:
+        """Return image array with YOLO-drawn boxes/labels."""
         return self.predict(image_path).plot()
     
     def get_detections(self, image_path: str) -> list[dict]:
+        """Convert raw YOLO boxes into plain dictionaries for UI consumption."""
         result = self.predict(image_path)
         boxes = result.boxes
 
@@ -33,6 +39,7 @@ class ImageLabeler:
         for class_id, conf, box_xyxy, box_xywhn in zip(
             class_ids, confidences, xyxy, xywhn
         ):
+            # Keep both pixel and normalized box formats for downstream tools.
             detections.append({
                 "class_id": int(class_id),
                 "class_name": result.names[int(class_id)],
@@ -46,6 +53,7 @@ class ImageLabeler:
     
     @staticmethod
     def to_yolo_label_lines(detections) -> list[str]:
+        """Serialize detection dictionaries to YOLO txt label line format."""
         if not detections:
             return []
 
