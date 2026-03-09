@@ -1,13 +1,11 @@
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
-from app_paths import app_base_dir
-
-
+from pathlib import Path
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
-        full_model_path = app_base_dir() / Path("Models/best_3-3-2026.pt")
+        full_model_path = Path.cwd() /"Models/best_3-3-2026.pt"
         self.model = YOLO(full_model_path)
 
     def predict(self, image_path: str):

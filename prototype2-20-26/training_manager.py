@@ -1,7 +1,6 @@
 from pathlib import Path
 import shutil
 import re
-from app_paths import app_base_dir
 
 class TrainingManager:
     def __init__(self, root_drive):
@@ -9,7 +8,8 @@ class TrainingManager:
 
         # Centralized training set location beside this module.
         # This is for the executable to work properly
-        base_dir = app_base_dir()
+        base_dir = Path.cwd()
+
         self.train_root = base_dir / "verified_images" / "dataset"
 
         self.images_dir = self.train_root / "images"

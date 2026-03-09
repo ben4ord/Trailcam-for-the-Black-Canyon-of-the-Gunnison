@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QMessageBox
 )
-
+from pathlib import Path
 from PySide6.QtCore import Qt
 import qtawesome as qta
 from nav_bar import NavBar
@@ -20,6 +20,9 @@ from label_store import LabelStore
 class LabelEditor(QDialog):
     def __init__(self, parent=None):
         super().__init__()
+        self.path = Path.cwd() / "classes.txt"
+        self.yaml = Path.cwd() / "data.yaml"        
+        
         self.label_store = LabelStore()
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
@@ -164,14 +167,14 @@ class LabelEditor(QDialog):
     # -----------------------------
 
     def load_labels(self):
-        labels = self.label_store.read_labels()
-        if not labels:
+        try:
+            with open(self.path, "r") as f:
+                labels = [line.strip() for line in f if line.strip()]
+                sorted_labels = sorted(labels, key=lambda x: x.lower())
+                for label in sorted_labels:
+                    self.label_list.addItem(QListWidgetItem(label))
+        except FileNotFoundError:
             self.label_list.addItem(QListWidgetItem("No label file found"))
-            return
-
-        sorted_labels = sorted(labels, key=lambda x: x.lower())
-        for label in sorted_labels:
-            self.label_list.addItem(QListWidgetItem(label))
 
     def on_label_clicked(self, item):
         self.selected_label.setText(item.text())
@@ -234,6 +237,99 @@ class LabelEditor(QDialog):
             self.label_list.clear()
             self.load_labels()
             self.selected_label.setText("No label selected")
+
+    # -----------------------------
+    # Txt/Yaml File Interaction Functions
+    # -----------------------------
+
+    def _save_to_txt(self, new_label):
+        with open(self.path, "r") as f: #read
+            labels = [line.strip() for line in f if line.strip()]
+
+        labels.append(new_label)
+
+        with open(self.path, "w") as f:
+            f.write("\n".join(labels))
+    
+    def _save_to_yaml(self, new_label):
+        with open(self.yaml, "r") as f:
+            data = f.read()
+        current_nc = int(data.split("nc: ")[1].split("\n")[0])
+
+        # Update nc
+        data = data.replace(f"nc: {current_nc}", f"nc: {current_nc + 1}")
+
+        # Get all label lines and their indices
+        lines = data.split("\n")
+        name_lines = [(i, line) for i, line in enumerate(lines) if line.startswith("  ") and ": " in line]
+
+        # Extract just the names into a plain list and insert new label alphabetically
+        names = [line.split(": ", 1)[1] for _, line in name_lines]
+        names.append(new_label)
+
+        # Rebuild the names block with correct indices
+        new_name_lines = [f"  {i}: {name}" for i, name in enumerate(names)]
+
+        # Find where old names block starts and ends, replace it entirely
+        first_line_idx = name_lines[0][0]
+        last_line_idx = name_lines[-1][0]
+        lines[first_line_idx:last_line_idx + 1] = new_name_lines
+
+        with open(self.yaml, "w") as f:
+            f.write("\n".join(lines))
+    
+
+    def _update_txt(self, old_label, new_label):
+        with open(self.path, "r") as f:
+            labels = [line.strip() for line in f if line.strip()] #get list of labels from file
+        labels = [new_label if l == old_label else l for l in labels] #replace old label with new label, otherwise keep looping through/keep same
+        with open(self.path, "w") as f: #write
+            f.write("\n".join(labels))
+
+    def _update_yaml(self, old_label, new_label):
+        with open(self.yaml, "r") as f:
+            data = f.read()
+        lines = data.split("\n") #get lines
+        name_lines = [(i, line) for i, line in enumerate(lines) if line.startswith("  ") and ": " in line] #get list of label lines
+        names = [line.split(": ", 1)[1] for _, line in name_lines] #get list of labels only
+        names = [new_label if n == old_label else n for n in names] #replace old label with new label 
+        new_name_lines = [f"  {i}: {name}" for i, name in enumerate(names)] #create new label lines
+        first_line_idx = name_lines[0][0] #index of first label line
+        last_line_idx = name_lines[-1][0] #index of last label line
+        lines[first_line_idx:last_line_idx + 1] = new_name_lines #replace old label lines with new label lines
+        with open(self.yaml, "w") as f: #write
+            f.write("\n".join(lines))
+
+    def _remove_from_txt(self, label):
+        with open(self.path, "r") as f:
+            labels = [line.strip() for line in f if line.strip()] #get list of labels
+        filtered_labels = []
+        for l in labels:
+            if l != label:
+                filtered_labels.append(l)
+        labels = filtered_labels #create new list without deleted label
+        with open(self.path, "w") as f: #write
+            f.write("\n".join(labels))
+
+    def _remove_from_yaml(self, label):
+        with open(self.yaml, "r") as f:
+            data = f.read()
+        current_nc = int(data.split("nc: ")[1].split("\n")[0])
+        data = data.replace(f"nc: {current_nc}", f"nc: {current_nc - 1}")
+        lines = data.split("\n")
+        name_lines = [(i, line) for i, line in enumerate(lines) if line.startswith("  ") and ": " in line]
+        names = [line.split(": ", 1)[1] for _, line in name_lines]
+        filtered_names = []
+        for name in names:
+            if name != label:
+                filtered_names.append(name)
+        names = filtered_names #create new list of names without deleted label
+        new_name_lines = [f"  {i}: {name}" for i, name in enumerate(names)] #make new lines
+        first_line_idx = name_lines[0][0]
+        last_line_idx = name_lines[-1][0]
+        lines[first_line_idx:last_line_idx + 1] = new_name_lines #replace old lines with new lines based on new indices
+        with open(self.yaml, "w") as f: #write
+            f.write("\n".join(lines))
 
 
 

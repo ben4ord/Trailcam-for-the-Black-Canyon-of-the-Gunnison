@@ -1,26 +1,31 @@
+import sys
+import os
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QGuiApplication
+
 from PySide6.QtWidgets import (
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QProgressBar,
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
+    QMainWindow, QWidget, QVBoxLayout,
+    QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
+from PySide6.QtCore import QThread
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication, QCloseEvent
+
+from training_worker import TrainingWorker
 from nav_bar import NavBar
+import torch
+from pathlib import Path
+import qtawesome as qta
 from training_config import TrainingConfig
 from training_session import get_training_session
 from ui_dialogs import confirm_action
 
 
 class TrainModel(QMainWindow):
-    def __init__(self, drive):
+    def __init__(self,drive):
         super().__init__()
-
         self.drive = drive
         self.session = get_training_session()
         self._abort_force_ms = 180000 # 3 minutes
@@ -76,9 +81,36 @@ class TrainModel(QMainWindow):
         self.progress_bar.setFormat("0.0%")
         layout.addWidget(self.progress_bar)
 
+        # Keep a compact log box for failures only.
+        self.log_view = QTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setMaximumHeight(120)
+        self.log_view.hide()
+        layout.addWidget(self.log_view)
+
+        # Train Button
         self.train_btn = QPushButton("Train New Model")
         self.train_btn.clicked.connect(self.train_new_model)
 
+        # Model Selector
+        model_row = QHBoxLayout()
+
+        self.model_combo = QComboBox()
+        self.model_combo.currentIndexChanged.connect(self._on_model_selected)
+        model_row.addWidget(self.model_combo)
+
+        self.refresh_btn = QPushButton()
+        self.refresh_btn.setIcon(qta.icon("fa5s.sync-alt"))
+        self.refresh_btn.setFixedSize(30, 30)
+        self.refresh_btn.setToolTip("Refresh model list")
+        self.refresh_btn.clicked.connect(self._populate_model_dropdown)
+        model_row.addWidget(self.refresh_btn)
+
+        layout.addLayout(model_row)
+
+        self._populate_model_dropdown()
+
+        # Stop Button
         self.stop_btn = QPushButton("Abort Training")
         self.stop_btn.clicked.connect(self.abort_training)
         self.stop_btn.setEnabled(False)
@@ -99,6 +131,43 @@ class TrainModel(QMainWindow):
     def _set_determinate_progress(self):
         if self.progress_bar.minimum() == 0 and self.progress_bar.maximum() == 0:
             self.progress_bar.setRange(0, 10000)
+
+    def _populate_model_dropdown(self):
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItem("Train from scratch", userData=None)
+
+        models_dir = os.path.join(os.path.dirname(__file__), "Models")
+        print(f"Looking for models in: {models_dir}")
+        print(f"Directory exists: {os.path.isdir(models_dir)}")
+        if os.path.isdir(models_dir):
+            print(f"Contents: {os.listdir(models_dir)}")
+            for f in sorted(os.listdir(models_dir)):
+                if f.endswith(".pt"):
+                    print(f"Found model file: {f}")
+                    print(f"Models dir path: {models_dir}")
+                    full_path = os.path.join(models_dir, f)
+                    self.model_combo.addItem(f, userData=f) #replace user data with full path if needed
+
+        self.model_combo.blockSignals(False)
+        self._on_model_selected(self.model_combo.currentIndex())
+
+    def _on_model_selected(self, index):
+        selected_txt = self.model_combo.currentText()
+        print(f"Selected model: {self.model_combo.currentData()}")
+        
+        if index == 0:
+            self.train_btn.setText("Train New Model")
+        else:
+            self.train_btn.setText(f"Train Using '{selected_txt}'")
+
+    def _get_device(self):
+        if torch.cuda.is_available():
+            return "0"          # Windows/Linux with NVIDIA GPU
+        elif torch.backends.mps.is_available():
+            return "mps"        # Apple Silicon Mac
+        else:
+            return "cpu"        # Fallback
 
     def train_new_model(self):
         if not confirm_action(
