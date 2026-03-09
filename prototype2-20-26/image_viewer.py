@@ -22,11 +22,11 @@ from PySide6.QtCore import Qt
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
-from training_manager import TrainingManager
+from verified_images_manager import TrainingManager
 from label_editor import LabelEditor
 from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
-from window_utils import pick_directory
+from window_utils import pick_directory, center_on_primary_screen
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -218,9 +218,12 @@ class ImageLoader(QMainWindow):
             self.load_current_image_data()
             self.update_display()
 
+        self.center_window()
         self.show()
 
-
+    # Center the window when they open it
+    def center_window(self):
+        center_on_primary_screen(self)
 
     # -----------------------------
     # Image handle functions
@@ -357,12 +360,12 @@ class ImageLoader(QMainWindow):
         # Redraw bounding box
         self.update_display()
 
-    def _get_verified_label_path(self, source_path):
+    def get_verified_label_path(self, source_path):
         """Map source image path to its verified dataset label txt file."""
         train_image_path = self.training_manager.generate_train_name(source_path)
         return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
 
-    def _load_detections_from_label_file(self, image_path, label_path):
+    def load_detections_from_label_file(self, image_path, label_path):
         """Load YOLO txt labels and convert normalized boxes back to pixel boxes."""
         image = cv2.imread(image_path)
         if image is None:
@@ -417,8 +420,8 @@ class ImageLoader(QMainWindow):
         if self.training_manager.is_verified_cached(path):
             # Verified images are ground-truth: prefer saved labels over inference.
             self.verified = True
-            label_path = self._get_verified_label_path(path)
-            self.detections = self._load_detections_from_label_file(path, label_path)
+            label_path = self.get_verified_label_path(path)
+            self.detections = self.load_detections_from_label_file(path, label_path)
         else:
             # Unverified images show current model predictions as a starting point.
             self.verified = False

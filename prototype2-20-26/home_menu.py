@@ -13,6 +13,8 @@ class MenuWindow(QMainWindow):
 
         self.resize(600, 200)
 
+        # This removes the original top navbar since we are using a custom one
+        # Without this it adds the new nav bar under the original
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
 
         self.nav_bar = NavBar(self)

@@ -24,30 +24,30 @@ class TrainingManager:
         self.images_dir.mkdir(parents=True, exist_ok=True)
         self.labels_dir.mkdir(parents=True, exist_ok=True)
 
-        self._verified_cache = set()
-        self._refresh_verified_cache()
+        self.verified_cache = set()
+        self.refresh_verified_cache()
 
     # ============================
     # UTILITIES
     # ============================
 
-    def _sanitize(self, name: str) -> str:
+    def sanitize(self, name: str) -> str:
         """Remove path-unsafe characters and normalize spaces."""
         return re.sub(r'[<>:"/\\|?*]', '', name).replace(" ", "_")
 
-    def _is_camera_folder(self, name: str) -> bool:
+    def is_camera_folder(self, name: str) -> bool:
         """Heuristic used to stop ancestor traversal at camera folder boundary."""
         return "-" in name and len(name) <= 5
     
-    def _refresh_verified_cache(self):
+    def refresh_verified_cache(self):
         """Rebuild fast lookup set of all dataset image filenames."""
-        self._verified_cache = {p.name for p in self.images_dir.glob("*") if p.is_file()}
+        self.verified_cache = {p.name for p in self.images_dir.glob("*") if p.is_file()}
 
     # ============================
     # CORE PATH PARSING
     # ============================
 
-    def _build_full_path_name(self, source_path: Path) -> str:
+    def build_full_path_name(self, source_path: Path) -> str:
         """Build deterministic dataset filename from source ancestry + stem."""
         source_path = Path(source_path).resolve()
 
@@ -57,12 +57,12 @@ class TrainingManager:
             parts.append(ancestor.name)
 
             # Once camera folder is reached, do not include higher-level folders.
-            if self._is_camera_folder(ancestor.name):
+            if self.is_camera_folder(ancestor.name):
                 break
 
         parts.reverse()
 
-        parts = [self._sanitize(p) for p in parts if p]
+        parts = [self.sanitize(p) for p in parts if p]
 
         return "_".join(parts + [source_path.stem]) + source_path.suffix
 
@@ -74,7 +74,7 @@ class TrainingManager:
         """Return destination path under dataset/images for given source image."""
         source_path = Path(source_path)
 
-        new_filename = self._build_full_path_name(source_path)
+        new_filename = self.build_full_path_name(source_path)
 
         return self.images_dir / new_filename
 
@@ -86,7 +86,7 @@ class TrainingManager:
 
         shutil.copy2(source_path, destination)
 
-        self._verified_cache.add(destination.name)
+        self.verified_cache.add(destination.name)
 
         label_path = self.labels_dir / f"{destination.stem}.txt"
 
@@ -99,7 +99,7 @@ class TrainingManager:
 
         label_path.write_text(label_content, encoding="utf-8")
 
-        self._refresh_verified_cache()
+        self.refresh_verified_cache()
 
         return destination, label_path
 
@@ -107,9 +107,9 @@ class TrainingManager:
     def is_verified_cached(self, source_path):
         """Fast in-memory check: does this source image already have dataset copy."""
         source_path = Path(source_path)
-        filename = self._build_full_path_name(source_path)
+        filename = self.build_full_path_name(source_path)
 
-        return filename in self._verified_cache
+        return filename in self.verified_cache
 
     def unverify_image(self, source_path):
         """Remove dataset image and label pair for a previously verified source."""
@@ -127,6 +127,6 @@ class TrainingManager:
         if label_path.exists():
             label_path.unlink()
 
-        self._verified_cache.discard(training_image_path.name)
+        self.verified_cache.discard(training_image_path.name)
 
-        self._refresh_verified_cache()
+        self.refresh_verified_cache()
