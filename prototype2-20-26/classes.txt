@@ -1,0 +1,24 @@
+bighorn sheep
+bird
+black bear
+bobcat
+coyote
+cow
+dog
+elk
+chipmunk
+hare
+marmot
+horse
+deer
+rodent
+turkey
+person
+cougar
+raccoon
+red fox
+skunk
+squirrel
+mustelid
+unidentified animal
+vehicle

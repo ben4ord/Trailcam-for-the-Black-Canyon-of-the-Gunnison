@@ -1,7 +1,8 @@
-from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout, QSizePolicy
-from PySide6.QtCore import Qt, QEvent, QPoint, Signal
+from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
+from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
 
 import qtawesome as qta
+from training_session import get_training_session
 
 
 class NavBar(QWidget):
@@ -13,6 +14,7 @@ class NavBar(QWidget):
         super().__init__()
 
         self.parent_window = parent_window
+        self.training_session = get_training_session()
         self._drag_active = False
         self._drag_position = QPoint()
         self._press_pos = QPoint()
@@ -43,9 +45,18 @@ class NavBar(QWidget):
         self.new_folder_btn.setToolTip("Select New Directory")
         self.new_folder_btn.clicked.connect(self.newFolderClicked.emit)
 
+        self.training_status_btn = QPushButton("Training: Idle")
+        self.training_status_btn.setToolTip("Current model training status. Click to open training window.")
+        self.training_status_btn.clicked.connect(self._open_training_window)
+        self.training_status_btn.setStyleSheet(
+            "padding: 2px 8px; border-radius: 8px; background: #2d3a47; color: #b9c4d0;"
+        )
+
         layout.addWidget(self.home_btn)
         layout.addWidget(self.update_labels_btn)
         layout.addWidget(self.new_folder_btn)
+        layout.addWidget(self.training_status_btn)
+
         layout.addStretch()
 
         # Window controls
@@ -68,6 +79,12 @@ class NavBar(QWidget):
             layout.addWidget(btn)
 
         self.installEventFilter(self)
+
+        self.training_status_timer = QTimer(self)
+        self.training_status_timer.setInterval(1000)
+        self.training_status_timer.timeout.connect(self._refresh_training_status)
+        self.training_status_timer.start()
+        self._refresh_training_status()
 
         self.update()
 
@@ -143,7 +160,78 @@ class NavBar(QWidget):
 
         return super().eventFilter(obj, event)
     
-    def set_button_visibility(self, home=True, update_labels=True, new_folder=True):
+    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, training_status=True):
         self.home_btn.setVisible(home)
         self.update_labels_btn.setVisible(update_labels)
         self.new_folder_btn.setVisible(new_folder)
+        self.training_status_btn.setVisible(training_status)
+
+    def _refresh_training_status(self):
+        snapshot = self.training_session.snapshot()
+        has_drive = bool(self._resolve_drive())
+        self.training_status_btn.setEnabled(has_drive)
+        if has_drive:
+            self.training_status_btn.setToolTip(
+                "Current model training status. Click to open training window."
+            )
+        else:
+            self.training_status_btn.setToolTip("Training status. Select/open a dataset first.")
+
+        if snapshot["running"]:
+            self.training_status_btn.setText("Training: Running")
+            self.training_status_btn.setStyleSheet(
+                "padding: 2px 8px; border-radius: 8px; background: #1f4f2e; color: #d3f5dc;"
+            )
+            return
+
+        status = str(snapshot["status"] or "")
+        if status == "Training complete":
+            self.training_status_btn.setText("Training: Complete")
+            self.training_status_btn.setStyleSheet(
+                "padding: 2px 8px; border-radius: 8px; background: #1f4f2e; color: #d3f5dc;"
+            )
+        elif status == "Training failed":
+            self.training_status_btn.setText("Training: Failed")
+            self.training_status_btn.setStyleSheet(
+                "padding: 2px 8px; border-radius: 8px; background: #5a2525; color: #ffd6d6;"
+            )
+        elif status == "Training aborted":
+            self.training_status_btn.setText("Training: Aborted")
+            self.training_status_btn.setStyleSheet(
+                "padding: 2px 8px; border-radius: 8px; background: #5a4a21; color: #ffe9b6;"
+            )
+        else:
+            self.training_status_btn.setText("Training: Idle")
+            self.training_status_btn.setStyleSheet(
+                "padding: 2px 8px; border-radius: 8px; background: #2d3a47; color: #b9c4d0;"
+            )
+
+    def _resolve_drive(self):
+        drive = getattr(self.parent_window, "drive", None)
+        if drive:
+            return drive
+
+        line_edit = getattr(self.parent_window, "dir_name_edit", None)
+        if line_edit is not None:
+            try:
+                text = line_edit.text().strip()
+                if text:
+                    return text
+            except Exception:
+                pass
+
+        return None
+
+    def _open_training_window(self):
+        drive = self._resolve_drive()
+        if not drive:
+            return
+
+        if self.parent_window.__class__.__name__ == "TrainModel":
+            return
+
+        from train_model import TrainModel
+
+        self.parent_window.trainWindow = TrainModel(drive)
+        self.parent_window.trainWindow.show()
+        self.parent_window.close()

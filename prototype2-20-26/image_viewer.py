@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
-
+import shutil
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -10,26 +10,23 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
     QLineEdit,
-    QFileDialog,
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
-    QMessageBox,
     QCheckBox,
     QComboBox,
-    QApplication,
-    QScrollArea,
-    QVBoxLayout,
-    
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
-from PySide6.QtCore import Qt, QSortFilterProxyModel,QStringListModel
+from PySide6.QtCore import Qt
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
 from training_manager import TrainingManager
 from label_editor import LabelEditor
+from label_store import LabelStore
+from ui_dialogs import confirm_action, show_info, show_no_images_popup
+from window_utils import pick_directory
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
@@ -49,13 +46,14 @@ class ImageLoader(QMainWindow):
         self.detections = []
         self.detection_combos = []
         self.deletion_bounding_box_cords = []
+        self.label_store = LabelStore()
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
         self.load_labels()
-        # print(self.labels)
         self.current_index = 0
         self.filter_mode = "all"
+        self.verified = False
 
         # -----------------------------
         # Model / backend logic
@@ -89,7 +87,7 @@ class ImageLoader(QMainWindow):
         layout.setSpacing(0)
 
         self.detection_editor = QListWidget()
-        self.detection_editor.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.detection_editor.setSelectionMode(QAbstractItemView.SingleSelection) #type: ignore
 
         self.detection_editor.currentRowChanged.connect(
             self.on_detection_selected
@@ -159,10 +157,10 @@ class ImageLoader(QMainWindow):
         self.nextImage.clicked.connect(self.next_image)
 
         # Keyboard shortcuts
-        QShortcut(Qt.Key_Right, self, self.next_image)
-        QShortcut(Qt.Key_Left, self, self.previous_image)
-        QShortcut(Qt.Key_Return, self, self.mark_verified)
-        QShortcut(Qt.Key_Enter, self, self.mark_verified)
+        QShortcut(Qt.Key_Right, self, self.next_image) # type: ignore
+        QShortcut(Qt.Key_Left, self, self.previous_image) # type: ignore
+        QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
+        QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
 
         # -----------------------------
         # Layout placement
@@ -206,6 +204,7 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.previousImage, 5, 0)
         layout.addWidget(self.nextImage, 5, 4)
 
+        # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         self.search_box.textChanged.connect(self.filter_list)
 
@@ -221,44 +220,40 @@ class ImageLoader(QMainWindow):
 
         self.show()
 
-    def _confirm_action(self, title, message):
-        if not self.confirm_toggle.isChecked():
-            return True
 
-        reply = QMessageBox.question(
-            self,
-            title,
-            message,
-            QMessageBox.Yes | QMessageBox.No
-        )
 
-        return reply == QMessageBox.Yes
-    
-    def _show_info(self, title, message):
-        if not self.confirm_toggle.isChecked():
-            return
-
-        QMessageBox.information(
-            self,
-            title,
-            message
-        )
-
+    # -----------------------------
+    # Image handle functions
+    # -----------------------------
     def load_image_list(self):
         self.image_list.clear()
 
         for image in self.filtered_images:
             item = QListWidgetItem(Path(image).name)
-            item.setData(Qt.UserRole, image)
-            self.image_list.addItem(item)   
+            item.setData(Qt.UserRole, image) # type: ignore
+            self.image_list.addItem(item)
+
+    def filter_list(self, text):
+        text = text.lower()
+
+        for row in range(self.image_list.count()):
+            item = self.image_list.item(row)
+
+            filename = item.text().lower()
+            #full_path = item.data(Qt.UserRole).lower()
+
+            match = text in filename
+            item.setHidden(not match)
 
     def delete_image(self):
         if not self.images:
           return
 
-        if not self._confirm_action(
+        if not confirm_action(
+            self,
             "Confirm Image Deletion?",
-            "Delete this image? (This could take a minute)"
+            "Delete this image? (This could take a minute)",
+            self.confirm_toggle.isChecked()
         ):
             return
 
@@ -270,7 +265,8 @@ class ImageLoader(QMainWindow):
         self.get_imgs(self.drive, True)
         self.image_list.takeItem(self.current_index)
 
-        self._show_info(
+        show_info(
+            self,
             "Image Deleted",
             f"Deleted from:\n{file_path}\n"
         )
@@ -280,15 +276,7 @@ class ImageLoader(QMainWindow):
             self.update_display()
         else:
             self.current_index = -1
-            self.show_no_images_popup()
-
-    def show_no_images_popup(self):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("No Images")
-        msg.setText("This folder contains no images.\n Select a new working directory.")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
+            show_no_images_popup(self)
 
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
@@ -355,7 +343,6 @@ class ImageLoader(QMainWindow):
 
         # Extract coordinates BEFORE removing
         x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
-        print("Deleting box:", x1, y1, x2, y2)
 
         # Remove detection
         self.detections.remove(det)
@@ -363,19 +350,81 @@ class ImageLoader(QMainWindow):
         # Refresh UI
         self.populate_detections(
             self.detections,
-            list(self.labeler.model.names.values())
+            self.labels
         )
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
         # Redraw bounding box
         self.update_display()
 
+    def _get_verified_label_path(self, source_path):
+        """Map source image path to its verified dataset label txt file."""
+        train_image_path = self.training_manager.generate_train_name(source_path)
+        return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
+
+    def _load_detections_from_label_file(self, image_path, label_path):
+        """Load YOLO txt labels and convert normalized boxes back to pixel boxes."""
+        image = cv2.imread(image_path)
+        if image is None:
+            return []
+
+        img_h, img_w = image.shape[:2]
+        detections = []
+
+        if not label_path.exists():
+            return detections
+
+        for raw_line in label_path.read_text(encoding="utf-8").splitlines():
+            parts = raw_line.strip().split()
+            if len(parts) != 5:
+                continue
+
+            try:
+                class_id = int(parts[0])
+                x_center, y_center, width, height = map(float, parts[1:])
+            except ValueError:
+                continue
+
+            # Convert YOLO normalized center/size to image-space corner coordinates.
+            x1 = (x_center - width / 2.0) * img_w
+            y1 = (y_center - height / 2.0) * img_h
+            x2 = (x_center + width / 2.0) * img_w
+            y2 = (y_center + height / 2.0) * img_h
+
+            class_name = (
+                self.labels[class_id]
+                if 0 <= class_id < len(self.labels)
+                else str(class_id)
+            )
+
+            detections.append(
+                {
+                    "class_id": class_id,
+                    "class_name": class_name,
+                    "confidence": 1.0,
+                    "bbox_xyxy": [x1, y1, x2, y2],
+                    "bbox_xywhn": [x_center, y_center, width, height],
+                }
+            )
+
+        return detections
+
     def load_current_image_data(self):
+        """Load detections from verified labels or live model inference."""
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
-        self.detections = self.labeler.get_detections(path)
-        class_list = list(self.labeler.model.names.values())
-        self.populate_detections(self.detections, class_list)
+
+        if self.training_manager.is_verified_cached(path):
+            # Verified images are ground-truth: prefer saved labels over inference.
+            self.verified = True
+            label_path = self._get_verified_label_path(path)
+            self.detections = self._load_detections_from_label_file(path, label_path)
+        else:
+            # Unverified images show current model predictions as a starting point.
+            self.verified = False
+            self.detections = self.labeler.get_detections(path)
+
+        self.populate_detections(self.detections, self.labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -400,27 +449,55 @@ class ImageLoader(QMainWindow):
         new_id = self.labels.index(new_label)
         self.detections[index]['class_id'] = new_id
 
-       
-        
 
-    def update_display(self,yoloBoxes=None,selection=False,Delete=False):
+    def update_display(self, yoloBoxes=None, selection=False):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
         
         path = self.filtered_images[self.current_index]
-        labeled_image = self.labeler.label_image(path)
-        color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+        if self.verified:
+            image = cv2.imread(path)
+            if image is None:
+                self.image_label.setText("Unable to load image")
+                return
+
+            # Verified images use saved labels, not model inference.
+            for det in self.detections:
+                x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
+                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 6)
+
+                label_text = f"{det['class_name']}"
+                text_y = y1 - 8 if y1 > 12 else y1 + 16
+                cv2.putText(
+                    image,
+                    label_text,
+                    (x1, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.5,
+                    (0, 255, 0),
+                    3,
+                    cv2.LINE_AA,
+                )
+
+            color_correction = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        else:
+            # Unverified images should keep YOLO's native plotting behavior.
+            labeled_image = self.labeler.label_image(path)
+            color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
         # Draw box around users selected object
-        if selection and not Delete:
-            color = (0, 255, 0) # Green color (BGR format)
-            thickness = 2
-            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #
+        if selection:
+            if self.verified:
+                color = (255, 0, 0) # Green color (BGR format)
+            else:
+                color = (0, 255, 0) # Blue color (BGR format)
+            thickness = 4
+            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
         if len(self.deletion_bounding_box_cords):
             color = (255, 0, 0) # Red color (BGR format)
             thickness = 5
             for box in self.deletion_bounding_box_cords:
-                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness) #
+                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness)
 
 
             
@@ -438,8 +515,8 @@ class ImageLoader(QMainWindow):
         if self.current_index < self.image_list.count():
             self.image_list.setCurrentRow(self.current_index)
 
-        if self.training_manager.is_verified_cached(path):
-            self.verification_status.setText("✔ Verified")
+        if self.verified:
+            self.verification_status.setText("Verified")
             self.verification_status.setStyleSheet("color: green; font-weight: bold;")
             self.verify_image.setEnabled(False)
             self.image_label.setStyleSheet("border: 4px solid green;")
@@ -450,40 +527,49 @@ class ImageLoader(QMainWindow):
             self.image_label.setStyleSheet("")
     
     def mark_verified(self):
+        """Persist current detections as YOLO labels in the training dataset."""
         if not self.filtered_images:
             return
         
         source = self.filtered_images[self.current_index]
         
         # Return is the image is already verified (doesn't allow a second 'Enter' keypress)
-        if self.training_manager.is_verified_cached(source):
+        if self.verified:
             return
         
-        if not self._confirm_action(
+        if not confirm_action(
+            self,
             "Confirm Verification",
-            "Verify this image?"
+            "Verify this image?",
+            self.confirm_toggle.isChecked()
         ):
             return
-        print(self.detections)
+        # Convert edited detections to YOLO txt lines before writing to dataset.
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
 
-        self._show_info(
+        show_info(
+            self,
             "Verified",
             f"Copied to:\n{new_path.name}\n\nLabel saved:\n{label_path.name}"
         )
-        self.verification_status.setText("✔ Verified")
+        self.verification_status.setText("Verified")
         self.verification_status.setStyleSheet("color: green; font-weight: bold;")
         self.verify_image.setEnabled(False)
         self.image_label.setStyleSheet("border: 4px solid green;")
 
+        self.next_image() # automatically scroll to next image (less button clicking)
+
     def unverify_image(self):
+        """Remove image/label pair from verified training dataset."""
         if not self.filtered_images:
             return
         
-        if not self._confirm_action(
+        if not confirm_action(
+            self,
             "Confirm Unverify",
-            "Remove verified dataset copy?"
+            "Remove verified dataset copy?",
+            self.confirm_toggle.isChecked()
         ):
             return
 
@@ -492,7 +578,8 @@ class ImageLoader(QMainWindow):
         # Delete verified training dataset copy + label file
         self.training_manager.unverify_image(source)
 
-        self._show_info(
+        show_info(
+            self,
             "Unverified",
             "Image removed from training dataset."
         )
@@ -509,7 +596,6 @@ class ImageLoader(QMainWindow):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
         imgs = []
-        # print(f"Getting images from {drive}")
         if os.path.exists(drive):
             for filename in os.listdir(drive):
                 # Check for image extension AND ensure it doesn't start with '.'
@@ -521,18 +607,18 @@ class ImageLoader(QMainWindow):
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
-            self.show_no_images_popup()
+            show_no_images_popup(self)
             return
 
         return 
     
     def open_dir_dialog(self):
-        dir_name = QFileDialog.getExistingDirectory(self, "Select a Directory")
+        dir_name = pick_directory(self, "Select a Directory")
         if dir_name:
-            print(f"Entering {dir_name}")
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
+
             self.get_imgs(self.drive, True)
             self.load_image_list()
 
@@ -541,24 +627,11 @@ class ImageLoader(QMainWindow):
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
-
+            
             self.training_manager = TrainingManager(self.drive)
-            self.training_manager._build_cache()
-
-    def filter_list(self, text):
-        text = text.lower()
-
-        for row in range(self.image_list.count()):
-            item = self.image_list.item(row)
-
-            filename = item.text().lower()
-            #full_path = item.data(Qt.UserRole).lower()
-
-            match = text in filename
-            item.setHidden(not match)
 
     def menu_window(self):
-        from menu import MenuWindow
+        from home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()
@@ -568,6 +641,10 @@ class ImageLoader(QMainWindow):
             editor = LabelEditor(self)
             editor.exec()
 
+
+    # -----------------------------
+    # Filtering functions
+    # -----------------------------
     def on_image_filter_changed(self, index):
         # Map dropdown index to filter mode
         if index == 0:
@@ -600,13 +677,18 @@ class ImageLoader(QMainWindow):
         self.load_image_list()
 
         if self.filtered_images:
+            self.load_current_image_data()
             self.update_display()
         else:
             self.image_label.setText("No images match filter")
     
-    def load_labels(self):
+    def load_labels(self): #self.labels = self.label_store.read_labels()
+        path = Path.cwd() / "classes.txt"
+        if not path.exists():
+         raise FileNotFoundError(f"{path} not found.")
+
         try:
-            with open("../classes.txt", "r") as file:
+            with open(path, "r") as file:
                 for line in file:
                     self.labels.append(line.strip())
                     print(line)
