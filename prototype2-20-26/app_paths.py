@@ -1,9 +1,6 @@
 from pathlib import Path
 import sys
 
-# -------------------------------------------------------------------------------------
-# We may not need this file because of the changes from getting the executable to work
-# -------------------------------------------------------------------------------------
 
 def app_base_dir() -> Path:
     if getattr(sys, "frozen", False):

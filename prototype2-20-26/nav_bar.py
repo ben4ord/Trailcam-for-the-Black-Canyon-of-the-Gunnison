@@ -1,7 +1,10 @@
 from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
+from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
+from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
 
 import qtawesome as qta
+from training_session import get_training_session
 from training_session import get_training_session
 
 
@@ -59,6 +62,8 @@ class NavBar(QWidget):
         layout.addWidget(self.home_btn)
         layout.addWidget(self.update_labels_btn)
         layout.addWidget(self.new_folder_btn)
+        layout.addWidget(self.training_status_btn)
+
         layout.addWidget(self.training_status_btn)
 
         layout.addStretch()

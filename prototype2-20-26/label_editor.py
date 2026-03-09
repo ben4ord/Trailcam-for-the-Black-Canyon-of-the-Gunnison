@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from pathlib import Path
+from pathlib import Path
 from PySide6.QtCore import Qt
 import qtawesome as qta
 from nav_bar import NavBar
@@ -20,6 +21,10 @@ from ui_dialogs import confirm_action
 class LabelEditor(QDialog):
     def __init__(self, parent=None):
         super().__init__()
+        self.path = Path.cwd() / "classes.txt"
+        self.yaml = Path.cwd() / "data.yaml"        
+        
+        self.label_store = LabelStore()
         self.path = Path.cwd() / "classes.txt"
         self.yaml = Path.cwd() / "data.yaml"        
         
@@ -42,6 +47,8 @@ class LabelEditor(QDialog):
         self.nav_bar.set_button_visibility(
             home=False,
             update_labels=False,
+            new_folder=False,
+            training_status=False,
             new_folder=False,
             training_status=False,
         )
@@ -84,6 +91,7 @@ class LabelEditor(QDialog):
         self.stack.addWidget(selected_label_page)
 
         self.selected_label = QLabel("No label selected")
+        self.selected_label.setAlignment(Qt.AlignCenter) # type: ignore
         self.selected_label.setAlignment(Qt.AlignCenter) # type: ignore
         selected_label_layout.addWidget(self.selected_label)
 
@@ -132,7 +140,9 @@ class LabelEditor(QDialog):
         edit_button_bar = QHBoxLayout()
         self.edit_confirm_button = QPushButton("Save")
         self.edit_cancel_button = QPushButton("Cancel")
+        self.edit_cancel_button = QPushButton("Cancel")
         edit_button_bar.addStretch()
+        edit_button_bar.addWidget(self.edit_cancel_button)
         edit_button_bar.addWidget(self.edit_cancel_button)
         edit_button_bar.addWidget(self.edit_confirm_button)
         edit_layout.addLayout(edit_button_bar)
@@ -160,6 +170,7 @@ class LabelEditor(QDialog):
         self.edit_button.clicked.connect(self.edit_label)
         self.delete_button.clicked.connect(self.delete_label)
         self.edit_cancel_button.clicked.connect(self.cancel_input)
+        self.edit_cancel_button.clicked.connect(self.cancel_input)
         self.edit_confirm_button.clicked.connect(self.confirm_edit)
 
     # -----------------------------
@@ -168,6 +179,7 @@ class LabelEditor(QDialog):
 
     def load_labels(self):
         try:
+            with open(self.path, "r") as f:
             with open(self.path, "r") as f:
                 labels = [line.strip() for line in f if line.strip()]
                 sorted_labels = sorted(labels, key=lambda x: x.lower())
@@ -180,6 +192,7 @@ class LabelEditor(QDialog):
         self.selected_label.setText(item.text())
 
     def filter_list(self, text):
+        text = text.lower()
         text = text.lower()
         for row in range(self.label_list.count()):
             item = self.label_list.item(row)
