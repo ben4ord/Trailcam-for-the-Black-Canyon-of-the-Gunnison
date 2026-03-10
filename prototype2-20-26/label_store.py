@@ -23,7 +23,13 @@ class LabelStore:
 
     def add_label(self, label: str) -> None:
         labels = self.read_labels()
-        labels.append(label)
+
+        index = 0
+        for check_label in labels:
+            if check_label == "$DUMMY_ANIMAL":
+                labels[index] = label
+            index += 1
+
         self.write_labels(labels)
         self.write_yaml_names(labels)
 

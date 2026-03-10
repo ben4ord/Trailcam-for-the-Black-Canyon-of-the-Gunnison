@@ -171,7 +171,8 @@ class LabelEditor(QDialog):
                 labels = [line.strip() for line in f if line.strip()]
                 sorted_labels = sorted(labels, key=lambda x: x.lower())
                 for label in sorted_labels:
-                    self.label_list.addItem(QListWidgetItem(label))
+                    if label != '$DUMMY_ANIMAL':
+                        self.label_list.addItem(QListWidgetItem(label))
         except FileNotFoundError:
             self.label_list.addItem(QListWidgetItem("No label file found"))
 

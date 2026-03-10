@@ -686,7 +686,7 @@ class ImageLoader(QMainWindow):
             self.image_label.setText("No images match filter")
     
 
-    def load_labels(self): #self.labels = self.label_store.read_labels()
+    def load_labels(self):
         path = Path.cwd() / "classes.txt"
         if not path.exists():
          raise FileNotFoundError(f"{path} not found.")
@@ -694,8 +694,8 @@ class ImageLoader(QMainWindow):
         try:
             with open(path, "r") as file:
                 for line in file:
-                    self.labels.append(line.strip())
-                    print(line)
+                    if line.strip() != "$DUMMY_ANIMAL":
+                        self.labels.append(line.strip())
         except Exception as e:
             print(e)
     
