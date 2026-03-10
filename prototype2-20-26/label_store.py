@@ -24,11 +24,15 @@ class LabelStore:
     def add_label(self, label: str) -> None:
         labels = self.read_labels()
 
-        index = 0
-        for check_label in labels:
+        replaced = False
+        for index, check_label in enumerate(labels):
             if check_label == "$DUMMY_ANIMAL":
                 labels[index] = label
-            index += 1
+                replaced = True
+                break
+
+        if not replaced:
+            labels.append(label)
 
         self.write_labels(labels)
         self.write_yaml_names(labels)
@@ -40,7 +44,11 @@ class LabelStore:
         self.write_yaml_names(labels)
 
     def remove_label(self, label: str) -> None:
-        labels = [value for value in self.read_labels() if value != label]
+        labels = self.read_labels()
+        for index, value in enumerate(labels):
+            if value == label:
+                labels[index] = "$DUMMY_ANIMAL"
+                break
         self.write_labels(labels)
         self.write_yaml_names(labels)
 
@@ -48,26 +56,28 @@ class LabelStore:
         if not self.data_yaml_path.exists():
             return
 
-        lines = self.data_yaml_path.read_text(encoding="utf-8").splitlines() # read in the individual lines from the yaml file
-        name_lines = [
-            (idx, line)
-            for idx, line in enumerate(lines)
-            if line.startswith("  ") and ": " in line
-        ]
-        if not name_lines:
-            return
-
-        new_name_lines = [f"  {idx}: {name}" for idx, name in enumerate(names)]
-
-        # track the first and last index of the names, then we can append to the end
-        first_idx = name_lines[0][0]
-        last_idx = name_lines[-1][0]
-        lines[first_idx:last_idx + 1] = new_name_lines
+        lines = self.data_yaml_path.read_text(encoding="utf-8").splitlines()
 
         # find the nc (number of classes) line and modify the count based on the new number of classes
         for idx, line in enumerate(lines):
             if line.startswith("nc: "):
                 lines[idx] = f"nc: {len(names)}"
                 break
+
+        names_index = None
+        for idx, line in enumerate(lines):
+            if line.strip() == "names:":
+                names_index = idx
+                break
+        if names_index is None:
+            return
+
+        block_start = names_index + 1
+        block_end = block_start
+        while block_end < len(lines) and lines[block_end].startswith("  "):
+            block_end += 1
+
+        name_lines = [f"  {idx}: {name}" for idx, name in enumerate(names)]
+        lines = lines[:block_start] + name_lines + lines[block_end:]
 
         self.data_yaml_path.write_text("\n".join(lines), encoding="utf-8")

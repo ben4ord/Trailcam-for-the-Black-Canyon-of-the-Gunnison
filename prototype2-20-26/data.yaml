@@ -4,7 +4,7 @@ train: images
 val: images
 split: 0.1
 
-nc: 120
+nc: 121
 
 names:
   0: bighorn sheep
@@ -127,3 +127,4 @@ names:
   117: $DUMMY_ANIMAL
   118: $DUMMY_ANIMAL
   119: $DUMMY_ANIMAL
+  120: $DUMMY_ANIMAL
