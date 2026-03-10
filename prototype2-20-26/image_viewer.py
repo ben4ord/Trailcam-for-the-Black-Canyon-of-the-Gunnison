@@ -41,6 +41,7 @@ class ImageLoader(QMainWindow):
         self.images = []
         self.filtered_images = []
         self.labels = []
+        self.active_labels = []
         self.drive = drive
         self.detections = []
         self.detection_combos = []
@@ -326,7 +327,10 @@ class ImageLoader(QMainWindow):
                 lambda _, det=det: self.delete_detection_object(det)
             )
             combo = QComboBox()
-            combo.addItems(class_list)
+            class_options = list(class_list)
+            if det["class_name"] not in class_options:
+                class_options.insert(0, det["class_name"])
+            combo.addItems(class_options)
             combo.setCurrentText(det["class_name"])
             combo.currentTextChanged.connect(
                 lambda text, i=i: self.on_detection_label_change(i,text)
@@ -352,7 +356,7 @@ class ImageLoader(QMainWindow):
         # Refresh UI
         self.populate_detections(
             self.detections,
-            self.labels
+            self.active_labels
         )
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
@@ -426,7 +430,7 @@ class ImageLoader(QMainWindow):
             self.verified = False
             self.detections = self.labeler.get_detections(path)
 
-        self.populate_detections(self.detections, self.labels)
+        self.populate_detections(self.detections, self.active_labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -643,6 +647,8 @@ class ImageLoader(QMainWindow):
         if self.images:
             editor = LabelEditor(self)
             editor.exec()
+            self.load_labels()
+            self.update_display()
 
 
     # -----------------------------
@@ -687,15 +693,12 @@ class ImageLoader(QMainWindow):
     
 
     def load_labels(self):
-        path = Path.cwd() / "classes.txt"
-        if not path.exists():
-         raise FileNotFoundError(f"{path} not found.")
-
-        try:
-            with open(path, "r") as file:
-                for line in file:
-                    if line.strip() != "$DUMMY_ANIMAL":
-                        self.labels.append(line.strip())
-        except Exception as e:
-            print(e)
+        self.labels.clear()
+        self.active_labels.clear()
+        labels = self.label_store.read_labels()
+        inactive = set(self.label_store.read_inactive_labels())
+        self.labels.extend(labels)
+        self.active_labels.extend(
+            [label for label in labels if label not in inactive and label != "$DUMMY_ANIMAL"]
+        )
     

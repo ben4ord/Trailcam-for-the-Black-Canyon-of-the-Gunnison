@@ -166,15 +166,14 @@ class LabelEditor(QDialog):
     # -----------------------------
 
     def load_labels(self):
-        try:
-            with open(self.path, "r") as f:
-                labels = [line.strip() for line in f if line.strip()]
-                sorted_labels = sorted(labels, key=lambda x: x.lower())
-                for label in sorted_labels:
-                    if label != '$DUMMY_ANIMAL':
-                        self.label_list.addItem(QListWidgetItem(label))
-        except FileNotFoundError:
-            self.label_list.addItem(QListWidgetItem("No label file found"))
+        labels = self.label_store.read_active_labels()
+        if not labels:
+            if not self.label_store.classes_path.exists():
+                self.label_list.addItem(QListWidgetItem("No label file found"))
+            return
+        sorted_labels = sorted(labels, key=lambda x: x.lower())
+        for label in sorted_labels:
+            self.label_list.addItem(QListWidgetItem(label))
 
     def on_label_clicked(self, item):
         self.selected_label.setText(item.text())
