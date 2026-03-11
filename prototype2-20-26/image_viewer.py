@@ -307,6 +307,12 @@ class ImageLoader(QMainWindow):
         self.detection_editor.clear()
         self.detection_combos.clear()
 
+        label_id_map = {name: idx for idx, name in enumerate(self.labels)}
+        sorted_options = sorted(
+            [(name, label_id_map[name]) for name in class_list if name in label_id_map],
+            key=lambda item: item[0].lower(),
+        )
+
         for i, det in enumerate(detections):
 
             item = QListWidgetItem()
@@ -327,11 +333,18 @@ class ImageLoader(QMainWindow):
                 lambda _, det=det: self.delete_detection_object(det)
             )
             combo = QComboBox()
-            class_options = list(class_list)
-            if det["class_name"] not in class_options:
-                class_options.insert(0, det["class_name"])
-            combo.addItems(class_options)
-            combo.setCurrentText(det["class_name"])
+            options = list(sorted_options)
+            if det["class_name"] not in label_id_map:
+                options.insert(0, (det["class_name"], det["class_id"]))
+
+            for name, class_id in options:
+                combo.addItem(name, class_id)
+
+            current_index = combo.findData(det["class_id"])
+            if current_index >= 0:
+                combo.setCurrentIndex(current_index)
+            else:
+                combo.setCurrentText(det["class_name"])
             combo.currentTextChanged.connect(
                 lambda text, i=i: self.on_detection_label_change(i,text)
             )
@@ -448,11 +461,14 @@ class ImageLoader(QMainWindow):
         if index < 0 or index >= len(self.detections):
             return
 
-        if new_label not in self.labels:
-            return
+        combo = self.detection_combos[index]
+        new_id = combo.currentData()
+        if new_id is None:
+            if new_label not in self.labels:
+                return
+            new_id = self.labels.index(new_label)
 
         self.detections[index]['class_name'] = new_label
-        new_id = self.labels.index(new_label)
         self.detections[index]['class_id'] = new_id
 
     def update_display(self, yoloBoxes=None, selection=False):
@@ -594,6 +610,7 @@ class ImageLoader(QMainWindow):
         self.verification_status.setText("Not Verified")
         self.verification_status.setStyleSheet("color: red;")
         self.image_label.setStyleSheet("")
+        self.refresh_filter(keep_current=True) # refresh the current image after we unverify it
   
 
     def get_imgs(self, drive, new_dir=False):
@@ -647,11 +664,16 @@ class ImageLoader(QMainWindow):
         if self.images:
             editor = LabelEditor(self)
             editor.exec()
-            self.load_labels()
-            self.update_display()
+            self.refresh_labels_ui()
 
 
     # -----------------------------
+    def refresh_labels_ui(self):
+        self.load_labels()
+        if self.detections:
+            self.populate_detections(self.detections, self.active_labels)
+        self.update_display()
+
     # Filtering functions
     # -----------------------------
     def on_image_filter_changed(self, index):
@@ -667,21 +689,30 @@ class ImageLoader(QMainWindow):
 
     def apply_filter(self, mode):
         self.filter_mode = mode
+        self.refresh_filter()
 
-        if mode == "all":
+    def refresh_filter(self, keep_current: bool = False):
+        current_path = None
+        if keep_current and self.filtered_images and 0 <= self.current_index < len(self.filtered_images):
+            current_path = self.filtered_images[self.current_index]
+
+        if self.filter_mode == "all":
             self.filtered_images = list(self.images)
-        elif mode == "verified":
+        elif self.filter_mode == "verified":
             self.filtered_images = [
                 img for img in self.images
                 if self.training_manager.is_verified_cached(img)
             ]
-        elif mode == "unverified":
+        elif self.filter_mode == "unverified":
             self.filtered_images = [
                 img for img in self.images
                 if not self.training_manager.is_verified_cached(img)
             ]
 
-        self.current_index = 0
+        if current_path and current_path in self.filtered_images:
+            self.current_index = self.filtered_images.index(current_path)
+        else:
+            self.current_index = 0
 
         self.load_image_list()
 
@@ -690,7 +721,6 @@ class ImageLoader(QMainWindow):
             self.update_display()
         else:
             self.image_label.setText("No images match filter")
-    
 
     def load_labels(self):
         self.labels.clear()
