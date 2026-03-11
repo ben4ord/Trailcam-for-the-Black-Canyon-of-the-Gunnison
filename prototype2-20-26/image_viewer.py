@@ -699,6 +699,6 @@ class ImageLoader(QMainWindow):
         inactive = set(self.label_store.read_inactive_labels())
         self.labels.extend(labels)
         self.active_labels.extend(
-            [label for label in labels if label not in inactive and label != "$DUMMY_ANIMAL"]
+            [label for label in labels if label not in inactive]
         )
     
