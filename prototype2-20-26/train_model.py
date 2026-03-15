@@ -5,6 +5,7 @@ which launches `training_subprocess.py` and exposes a polling snapshot API.
 """
 
 import os
+import re
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QGuiApplication
@@ -147,19 +148,22 @@ class TrainModel(QMainWindow):
         self.model_combo.clear()
         self.model_combo.addItem("Train from scratch", userData=None)
 
+        #TODO: could possibly pull this file io into a seperate function to also use with resuming training
         models_dir = os.path.join(os.path.dirname(__file__), "Models")
         print(f"Looking for models in: {models_dir}")
         print(f"Directory exists: {os.path.isdir(models_dir)}")
         if os.path.isdir(models_dir):
-            print(f"Contents: {os.listdir(models_dir)}")
-            for f in sorted(os.listdir(models_dir)):
-                if f.endswith(".pt"):
-                    print(f"Found model file: {f}")
-                    print(f"Models dir path: {models_dir}")
-                    full_path = os.path.join(models_dir, f)
-                    # Keep file name in userData; training config resolves path later.
-                    self.model_combo.addItem(f, userData=f) #replace user data with full path if needed
-
+            for (root, dirs, files) in os.walk(models_dir):
+                for f in files:
+                    if f.endswith(".pt"):
+                        print(f"Found model file: {f}")
+                        full_path = os.path.join(root,f)
+                        print(f"Full path to model: {full_path}")
+                        relative_path = os.path.relpath(full_path, start=models_dir)
+                        print(f"Relative path to model: {relative_path}")
+                        # Keep file name in userData; training config resolves path later.
+                        if f != "last.pt": #ignore last.pt file
+                            self.model_combo.addItem(relative_path, userData=relative_path) #TODO: confirm that we want to dipsplay relative path, can also display just f for name of model
         self.model_combo.blockSignals(False)
         self.on_model_selected(self.model_combo.currentIndex())
 
@@ -176,13 +180,39 @@ class TrainModel(QMainWindow):
 
     # Get the user device (this is for GPU usage when training, should work on Mac as well)
     def get_device(self):
-        """Legacy helper kept for reference if manual device controls are re-added."""
+        """Device control"""
         if torch.cuda.is_available():
             return "0"          # Windows/Linux with NVIDIA GPU
         elif torch.backends.mps.is_available():
             return "mps"        # Apple Silicon Mac
         else:
             return "cpu"        # Fallback
+
+    def get_next_available_run_name(self, project: str, base_name: str) -> str:
+        """Find the next available run folder name by incrementing if needed."""
+        project_path = os.path.join(os.path.dirname(__file__), project)
+        
+        # If project folder doesn't exist yet, use the base name as-is
+        if not os.path.isdir(project_path):
+            return base_name
+        
+        # Use regex to seperate base name and number part 
+        # (.+?): Group 1 non numeric prefix, (\d*): Group 2 numeric suffix
+        match = re.match(r'(.+?)(\d*)$', base_name)
+        if match:
+            name_part = match.group(1)
+            num_part = match.group(2)
+            start_num = int(num_part) if num_part else 1
+        else:
+            name_part = base_name
+            start_num = 1
+        
+        # Find the next available number
+        counter = start_num
+        while os.path.isdir(os.path.join(project_path, f"{name_part}{counter}")):
+            counter += 1
+        
+        return f"{name_part}{counter}"
 
     # This is to start training on a completely new model (no previous weights)
     # This calls the session.start which launches a function in traning_session.py
@@ -195,7 +225,9 @@ class TrainModel(QMainWindow):
         ):
             return
 
-        ok, message = self.session.start(self.drive, TrainingConfig())
+        config = TrainingConfig(model=self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt", device=self.get_device())
+        config.name = self.get_next_available_run_name(config.project, config.name)
+        ok, message = self.session.start(self.drive, config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
             return
