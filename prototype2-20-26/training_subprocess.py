@@ -418,9 +418,14 @@ def main() -> int:
         progress_tracker = ProgressTracker(config.epochs)
         emit("progress", progress=0, status="Loading YOLO model...")
 
+        # Resolve model path: if relative, resolve relative to Models directory.
+        model_path = config.model
+        if model_path and not Path(model_path).is_absolute():
+            model_path = str((project_path / model_path).resolve())
+
         # Route Ultralytics stdout/stderr through parser so UI can show key stages.
         with redirect_stdout(parser_stream), redirect_stderr(parser_stream):  # type: ignore
-            model = YOLO(config.model)
+            model = YOLO(model_path)
 
             def on_train_start(trainer):
                 # First callback confirms trainer loop is active.
