@@ -150,17 +150,12 @@ class TrainModel(QMainWindow):
 
         #TODO: could possibly pull this file io into a seperate function to also use with resuming training
         models_dir = os.path.join(os.path.dirname(__file__), "Models")
-        print(f"Looking for models in: {models_dir}")
-        print(f"Directory exists: {os.path.isdir(models_dir)}")
         if os.path.isdir(models_dir):
             for (root, dirs, files) in os.walk(models_dir):
                 for f in files:
                     if f.endswith(".pt"):
-                        print(f"Found model file: {f}")
                         full_path = os.path.join(root,f)
-                        print(f"Full path to model: {full_path}")
                         relative_path = os.path.relpath(full_path, start=models_dir)
-                        print(f"Relative path to model: {relative_path}")
                         # Keep file name in userData; training config resolves path later.
                         if f != "last.pt": #ignore last.pt file
                             self.model_combo.addItem(relative_path, userData=relative_path) #TODO: confirm that we want to dipsplay relative path, can also display just f for name of model
@@ -171,7 +166,6 @@ class TrainModel(QMainWindow):
     def on_model_selected(self, index):
         """Update primary action text to reflect selected base model."""
         selected_txt = self.model_combo.currentText()
-        print(f"Selected model: {self.model_combo.currentData()}")
         
         if index == 0:
             self.train_btn.setText("Train New Model")
