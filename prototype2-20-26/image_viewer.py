@@ -27,6 +27,8 @@ from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
 from window_utils import pick_directory, center_on_primary_screen
 
+
+
 class ImageLoader(QMainWindow):
     def __init__(self, drive):
         super().__init__()
@@ -47,6 +49,9 @@ class ImageLoader(QMainWindow):
         self.detection_combos = []
         self.deletion_bounding_box_cords = []
         self.label_store = LabelStore()
+        self.current_base_bgr = None
+        self.current_unverified_bgr = None
+        self.current_image_path = None
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
@@ -276,6 +281,7 @@ class ImageLoader(QMainWindow):
 
         if self.images:
             self.current_index = min(self.current_index, len(self.images) - 1)
+            self.load_current_image_data()
             self.update_display()
         else:
             self.current_index = -1
@@ -381,13 +387,15 @@ class ImageLoader(QMainWindow):
         train_image_path = self.training_manager.generate_train_name(source_path)
         return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
 
-    def load_detections_from_label_file(self, image_path, label_path):
+    def load_detections_from_label_file(self, image_path, label_path, image_shape=None):
         """Load YOLO txt labels and convert normalized boxes back to pixel boxes."""
-        image = cv2.imread(image_path)
-        if image is None:
-            return []
-
-        img_h, img_w = image.shape[:2]
+        if image_shape is None:
+            image = cv2.imread(image_path)
+            if image is None:
+                return []
+            img_h, img_w = image.shape[:2]
+        else:
+            img_h, img_w = image_shape[:2]
         detections = []
 
         if not label_path.exists():
@@ -430,18 +438,36 @@ class ImageLoader(QMainWindow):
 
     def load_current_image_data(self):
         """Load detections from verified labels or live model inference."""
+        if not self.filtered_images:
+            return
+
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
+        self.current_image_path = path
+        self.current_base_bgr = None
+        self.current_unverified_bgr = None
 
         if self.training_manager.is_verified_cached(path):
             # Verified images are ground-truth: prefer saved labels over inference.
             self.verified = True
+            self.current_base_bgr = cv2.imread(path)
+            if self.current_base_bgr is None:
+                self.image_label.setText("Unable to load image")
+                self.detections = []
+                self.populate_detections(self.detections, self.active_labels)
+                return
             label_path = self.get_verified_label_path(path)
-            self.detections = self.load_detections_from_label_file(path, label_path)
+            self.detections = self.load_detections_from_label_file(
+                path,
+                label_path,
+                self.current_base_bgr.shape,
+            )
         else:
             # Unverified images show current model predictions as a starting point.
             self.verified = False
-            self.detections = self.labeler.get_detections(path)
+            result = self.labeler.predict(path)
+            self.detections = self.labeler.detections_from_result(result)
+            self.current_unverified_bgr = result.plot()
 
         self.populate_detections(self.detections, self.active_labels)
 
@@ -475,15 +501,18 @@ class ImageLoader(QMainWindow):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
-        
-        path = self.filtered_images[self.current_index]
+
+        if self.current_base_bgr is None and self.current_unverified_bgr is None:
+            return
+
         if self.verified:
-            image = cv2.imread(path)
-            if image is None:
+            if self.current_base_bgr is None:
                 self.image_label.setText("Unable to load image")
                 return
 
-            # Verified images use saved labels, not model inference.
+            image = self.current_base_bgr.copy()
+
+            # Verified images: draw green boxes from saved labels.
             for det in self.detections:
                 x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
                 cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 6)
@@ -500,12 +529,13 @@ class ImageLoader(QMainWindow):
                     3,
                     cv2.LINE_AA,
                 )
-
-            color_correction = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         else:
-            # Unverified images should keep YOLO's native plotting behavior.
-            labeled_image = self.labeler.label_image(path)
-            color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+            if self.current_unverified_bgr is None:
+                self.image_label.setText("Unable to load image")
+                return
+
+            # Unverified images: keep YOLO's native plot styling.
+            image = self.current_unverified_bgr.copy()
         
         # Draw box around users selected object
         if selection:
@@ -514,21 +544,21 @@ class ImageLoader(QMainWindow):
             else:
                 color = (0, 255, 0) # Blue color (BGR format)
             thickness = 4
-            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
+            cv2.rectangle(image, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
         if len(self.deletion_bounding_box_cords):
             color = (255, 0, 0) # Red color (BGR format)
             thickness = 5
             for box in self.deletion_bounding_box_cords:
-                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness)
+                cv2.rectangle(image, (box[0], box[1]), (box[2], box[3]), color, thickness)
 
-            
+        color_correction = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(color_correction)
         pixmap = QPixmap.fromImage(pil_image.toqimage())
         scaled_pixmap = pixmap.scaled(
             1000,
             700,
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
+            Qt.TransformationMode.FastTransformation,
         )
 
         self.image_label.setPixmap(scaled_pixmap)
@@ -647,6 +677,7 @@ class ImageLoader(QMainWindow):
 
             if self.images:
                 self.image_list.setCurrentRow(0)
+                self.load_current_image_data()
                 self.update_display()
             else:
                 self.image_label.setText("No images found")

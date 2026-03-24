@@ -7,7 +7,7 @@ import numpy as np
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
-        full_model_path = Path.cwd() /"Models/best_lowAugmentation.pt"
+        full_model_path = Path.cwd() /"Models/best_fullRun.pt"
         # Model is loaded once so repeated image predictions are fast.
         self.model = YOLO(full_model_path)
 
@@ -22,8 +22,12 @@ class ImageLabeler:
         return self.predict(image_path).plot()
     
     def get_detections(self, image_path: str) -> list[dict]:
-        """Convert raw YOLO boxes into plain dictionaries for UI consumption."""
+        """Run inference and convert YOLO boxes into plain dictionaries."""
         result = self.predict(image_path)
+        return self.detections_from_result(result)
+
+    def detections_from_result(self, result) -> list[dict]:
+        """Convert a YOLO result object into plain dictionaries for UI use."""
         boxes = result.boxes
 
         if boxes is None or len(boxes) == 0:
