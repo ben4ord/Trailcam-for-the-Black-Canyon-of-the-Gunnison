@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -10,9 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QWidget
 )
-
 from PySide6.QtCore import Qt
-
 from home_menu import MenuWindow
 from nav_bar import NavBar
 from window_utils import center_on_primary_screen, pick_directory
@@ -78,6 +75,7 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
+    # Look for training in the background 
     if "--training-subprocess" in sys.argv:
         from training_subprocess import main as training_subprocess_main
 

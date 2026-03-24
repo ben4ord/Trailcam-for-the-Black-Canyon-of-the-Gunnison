@@ -3,6 +3,7 @@
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
+import math
 
 class ImageLabeler:
     def __init__(self):
@@ -49,6 +50,25 @@ class ImageLabeler:
             })
 
         return detections
+    
+
+    def get_conf_scores_single(self, image_path):
+        results = self.model(image_path,verbose=False)
+
+        r = results[0]
+
+        if r.boxes is None or len(r.boxes) == 0:
+            return {"class_ids": [], "confidences": []}
+        
+
+        return {
+            "class_ids": r.boxes.cls.tolist(),
+            "confidences": r.boxes.conf.tolist(),
+            "bbox_xyxy": r.boxes.xyxy.tolist(),
+            "bbox_xywhn": r.boxes.xywhn.tolist(),
+            "image_path": image_path
+        }
+
     
     
     @staticmethod

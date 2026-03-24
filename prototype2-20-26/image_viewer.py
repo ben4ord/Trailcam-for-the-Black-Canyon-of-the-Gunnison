@@ -28,7 +28,7 @@ from ui_dialogs import confirm_action, show_info, show_no_images_popup
 from window_utils import pick_directory, center_on_primary_screen
 
 class ImageLoader(QMainWindow):
-    def __init__(self, drive):
+    def __init__(self, drive,model_verified=None,model_discarded=None):
         super().__init__()
 
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -46,6 +46,14 @@ class ImageLoader(QMainWindow):
         self.detection_combos = []
         self.deletion_bounding_box_cords = []
         self.label_store = LabelStore()
+        if model_verified:
+            self.model_verified = model_verified
+            print("Model Verified Images")
+            print(self.model_verified)
+        if model_discarded:
+            self.model_discarded = model_discarded
+            print("Model Discared Images")
+            print(self.model_discarded)
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
@@ -122,7 +130,9 @@ class ImageLoader(QMainWindow):
         self.filter_dropdown.addItems([
             "All Images",
             "Verified Only",
-            "Unverified Only"
+            "Unverified Only",
+            "Model Verified",
+            "Model Deleted"
         ])
         self.filter_dropdown.currentIndexChanged.connect(
             self.on_image_filter_changed
@@ -592,26 +602,48 @@ class ImageLoader(QMainWindow):
         self.image_label.setStyleSheet("")
   
 
-    def get_imgs(self, drive, new_dir=False):
+    # def get_imgs(self, drive, new_dir=False):
+    #     if(new_dir):
+    #         self.images.clear()
+    #         self.deletion_bounding_box_cords.clear()
+    #     imgs = []
+    #     if os.path.exists(drive):
+    #         for filename in os.listdir(drive):
+    #             # Check for image extension AND ensure it doesn't start with '.'
+    #             if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+    #                 if not filename.startswith('.'): 
+    #                     img_path = os.path.join(drive, filename)   
+    #                     imgs.append(img_path)
+
+    #     self.images = imgs
+    #     self.filtered_images = list(imgs)
+    #     if not imgs:
+    #         show_no_images_popup(self)
+    #         return
+
+    #     return 
+    
+    def get_imgs(self,path,new_dir=False):
         if(new_dir):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
         imgs = []
-        if os.path.exists(drive):
-            for filename in os.listdir(drive):
-                # Check for image extension AND ensure it doesn't start with '.'
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
-                    if not filename.startswith('.'): 
-                        img_path = os.path.join(drive, filename)   
-                        imgs.append(img_path)
-
+        for root, dirs, files in os.walk(path):
+            print(f"Current directory: {root}")
+            print(f"Subdirectories: {dirs}")
+            # print(f"Files: {files}")
+            for file in files:
+                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+                    # Get the full path of the file
+                    file_path = os.path.join(root, file)
+                    # print(f"Found file: {file_path}")
+                    imgs.append(file_path)
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
             show_no_images_popup(self)
             return
-
-        return 
+        return
     
     def open_dir_dialog(self):
         dir_name = pick_directory(self, "Select a Directory")
@@ -654,14 +686,18 @@ class ImageLoader(QMainWindow):
             mode = "all"
         elif index == 1:
             mode = "verified"
-        else:
+        elif index == 2:
             mode = "unverified"
+        elif index == 3:
+            mode = "model_verified"
+        elif index == 4:
+            mode = "model_discarded"
 
         self.apply_filter(mode)
 
     def apply_filter(self, mode):
         self.filter_mode = mode
-
+        self.filtered_images.clear()
         if mode == "all":
             self.filtered_images = list(self.images)
         elif mode == "verified":
@@ -672,6 +708,18 @@ class ImageLoader(QMainWindow):
         elif mode == "unverified":
             self.filtered_images = [
                 img for img in self.images
+                if not self.training_manager.is_verified_cached(img)
+            ]
+        elif mode == "model_verified":
+            if self.model_verified:
+                for det in self.model_verified:
+                    path = det["image_path"]
+                    if not self.training_manager.is_verified_cached(path):
+                        self.filtered_images.append(path)
+                                   
+        elif mode == "model_discarded":
+            self.filtered_images = [
+                img for img in self.model_discarded
                 if not self.training_manager.is_verified_cached(img)
             ]
 
@@ -695,7 +743,6 @@ class ImageLoader(QMainWindow):
             with open(path, "r") as file:
                 for line in file:
                     self.labels.append(line.strip())
-                    print(line)
         except Exception as e:
             print(e)
     

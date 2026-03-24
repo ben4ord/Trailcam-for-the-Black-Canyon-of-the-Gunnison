@@ -99,7 +99,7 @@ class TrainingManager:
 
         label_path.write_text(label_content, encoding="utf-8")
 
-        self.refresh_verified_cache()
+        #self.refresh_verified_cache()
 
         return destination, label_path
 
@@ -129,4 +129,4 @@ class TrainingManager:
 
         self.verified_cache.discard(training_image_path.name)
 
-        self.refresh_verified_cache()
+        #self.refresh_verified_cache()
