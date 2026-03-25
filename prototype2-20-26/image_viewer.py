@@ -469,8 +469,15 @@ class ImageLoader(QMainWindow):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
-        
+         
         path = self.filtered_images[self.current_index]
+        if self.current_index < self.image_list.count():
+            self.image_list.setCurrentRow(self.current_index)
+
+        if cv2.imread(path) is None:
+            self.image_label.setText("Unable to load image")
+            return
+            
         if self.verified:
             image = cv2.imread(path)
             if image is None:
@@ -499,7 +506,11 @@ class ImageLoader(QMainWindow):
         else:
             # Unverified images should keep YOLO's native plotting behavior.
             labeled_image = self.labeler.label_image(path)
-            color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+            if labeled_image is not None:
+                color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+            else:
+                self.image_label.setText("Unable to load image")
+                return
         
         # Draw box around users selected object
         if selection:
@@ -526,9 +537,6 @@ class ImageLoader(QMainWindow):
         )
 
         self.image_label.setPixmap(scaled_pixmap)
-        
-        if self.current_index < self.image_list.count():
-            self.image_list.setCurrentRow(self.current_index)
 
         if self.verified:
             self.verification_status.setText("Verified")

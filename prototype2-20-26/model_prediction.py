@@ -15,13 +15,20 @@ class ImageLabeler:
 
     def predict(self, image_path: str):
         """Run inference and return first result object for a single image path."""
-        results = self.model(image_path, verbose=False)
-        return results[0]
+        if self.check_image_corruption(image_path):
+            results = self.model(image_path, verbose=False)
+            return results[0]
+        else:
+            return None
 
    
     def label_image(self, image_path: str) -> np.ndarray:
         """Return image array with YOLO-drawn boxes/labels."""
-        return self.predict(image_path).plot()
+        prediction = self.predict(image_path)
+        if prediction is not None:
+            return prediction.plot()
+        else:
+            return None
     
     def get_detections(self, image_path: str) -> list[dict]:
         """Convert raw YOLO boxes into plain dictionaries for UI consumption."""
