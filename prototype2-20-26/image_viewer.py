@@ -135,7 +135,8 @@ class ImageLoader(QMainWindow):
             "Verified Only",
             "Unverified Only",
             "Model Verified",
-            "Model Deleted"
+            "Model Discarded",
+            "Recently Deleted"
         ])
         self.filter_dropdown.currentIndexChanged.connect(
             self.on_image_filter_changed
@@ -604,47 +605,18 @@ class ImageLoader(QMainWindow):
         self.verification_status.setStyleSheet("color: red;")
         self.image_label.setStyleSheet("")
   
-
-    # def get_imgs(self, drive, new_dir=False):
-    #     if(new_dir):
-    #         self.images.clear()
-    #         self.deletion_bounding_box_cords.clear()
-    #     imgs = []
-    #     if os.path.exists(drive):
-    #         for filename in os.listdir(drive):
-    #             # Check for image extension AND ensure it doesn't start with '.'
-    #             if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
-    #                 if not filename.startswith('.'): 
-    #                     img_path = os.path.join(drive, filename)   
-    #                     imgs.append(img_path)
-
-    #     self.images = imgs
-    #     self.filtered_images = list(imgs)
-    #     if not imgs:
-    #         show_no_images_popup(self)
-    #         return
-
-    #     return 
-    
     def get_imgs(self,path,new_dir=False):
         if(new_dir):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
         imgs = []
         for root, dirs, files in os.walk(path):
-            #print(f"Current directory: {root}")
-            #print(f"Subdirectories: {dirs}")
-            # print(f"Files: {files}")
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
-                    
-                    valid_image = cv2.imread(file_path)
-                    if valid_image is not None:
-                        imgs.append(file_path)
-                    else:
-                        print(f"Skipping invalid image: {file_path}")
+                    imgs.append(file_path)
+    
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
@@ -703,6 +675,8 @@ class ImageLoader(QMainWindow):
             mode = "model_verified"
         elif index == 4:
             mode = "model_discarded"
+        elif index == 5:
+            mode = "recently_deleted"
 
         self.apply_filter(mode)
 

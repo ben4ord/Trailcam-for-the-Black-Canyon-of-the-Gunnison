@@ -70,8 +70,9 @@ class BatchPrediction(QMainWindow):
 
     def start_processing(self):
         self.scan_folders_walk(self.drive)
-        #print(f"Total Images Found {self.total_images}")
+        print(f"Total Images Found {self.total_images}")
         self.labeler = ImageLabeler()
+        
         self.predict_all_images()
         self.view_image_window()
 
@@ -79,23 +80,19 @@ class BatchPrediction(QMainWindow):
     #Collect all images in folder and subfolders
     def scan_folders_walk(self,path):
         for root, dirs, files in os.walk(path):
-            #print(f"Current directory: {root}")
-            #print(f"Subdirectories: {dirs}")
-            #print(f"Files: {files}")
+            print(f"Current directory: {root}")
+            print(f"Subdirectories: {dirs}")
+            print(f"Files: {files}")
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
-                    valid_image = cv2.imread(file_path)
-                    if valid_image is not None:
-                        self.images.append(file_path)
-                        self.total_images +=1
-                    else:
-                        print(f"Skipping invalid image: {file_path}")
-        
+                    self.images.append(file_path)
+                    self.total_images +=1
     
   
     def predict_all_images(self):
+        print("predicting images")
         self.detections = []
 
         total = len(self.images)
