@@ -26,7 +26,7 @@ from label_editor import LabelEditor
 from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
 from window_utils import pick_directory, center_on_primary_screen
-
+import shutil
 class ImageLoader(QMainWindow):
     def __init__(self, drive,model_verified=None,model_discarded=None):
         super().__init__()
@@ -268,23 +268,23 @@ class ImageLoader(QMainWindow):
         if not confirm_action(
             self,
             "Confirm Image Deletion?",
-            "Delete this image? (This could take a minute)",
+            "Delete this image? (This could take a minute)\n(Image will be moved to Recently Deleted folder)",
             self.confirm_toggle.isChecked()
         ):
             return
 
         file_path = self.filtered_images[self.current_index]
 
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
+        if Path(file_path).is_file():
+            self.move_to_recently_deleted(file_path)
+            
         self.get_imgs(self.drive, True)
         self.image_list.takeItem(self.current_index)
 
         show_info(
             self,
             "Image Deleted",
-            f"Deleted from:\n{file_path}\n"
+            f"Deleted from:\n{file_path}\n Move to Recently Deleted Folder"
         )
 
         if self.images:
@@ -293,6 +293,22 @@ class ImageLoader(QMainWindow):
         else:
             self.current_index = -1
             show_no_images_popup(self)
+
+    def move_to_recently_deleted(self,original_path_str):
+        original_path = Path(original_path_str)
+        # Extract drive root ("E:\\")
+        root = Path(original_path.anchor)
+        # Define new root
+        deleted_root = root / "Recently Deleted"
+        # Get path relative to root
+        relative_path = original_path.relative_to(root)
+        # Build new destination path
+        destination = deleted_root / relative_path
+        # Ensure directory structure exists
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        # Move the file
+        shutil.move(str(original_path), str(destination))
+        print(f"Moved to: {destination}")
 
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
@@ -613,7 +629,7 @@ class ImageLoader(QMainWindow):
         self.verification_status.setStyleSheet("color: red;")
         self.image_label.setStyleSheet("")
   
-    def get_imgs(self,path,new_dir=False):
+    def get_imgs(self,path,new_dir=False,deleted_folder=False):
         if(new_dir):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
@@ -624,7 +640,10 @@ class ImageLoader(QMainWindow):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
                     imgs.append(file_path)
-    
+
+        if deleted_folder:
+            return imgs 
+        
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
@@ -691,6 +710,7 @@ class ImageLoader(QMainWindow):
     def apply_filter(self, mode):
         self.filter_mode = mode
         self.filtered_images.clear()
+        self.delete_button.setVisible(True)
         if mode == "all":
             self.filtered_images = list(self.images)
         elif mode == "verified":
@@ -708,13 +728,17 @@ class ImageLoader(QMainWindow):
                 for det in self.model_verified:
                     path = det["image_path"]
                     if not self.training_manager.is_verified_cached(path):
-                        self.filtered_images.append(path)
-                                   
+                        self.filtered_images.append(path)                     
         elif mode == "model_discarded":
             self.filtered_images = [
                 img for img in self.model_discarded
                 if not self.training_manager.is_verified_cached(img)
             ]
+        elif mode == "recently_deleted":
+            root = Path(self.drive).anchor
+            deleted_root = Path(root) / "Recently Deleted"
+            self.filtered_images = self.get_imgs(deleted_root,False,True)
+            self.delete_button.setVisible(False)
 
         self.current_index = 0
 
