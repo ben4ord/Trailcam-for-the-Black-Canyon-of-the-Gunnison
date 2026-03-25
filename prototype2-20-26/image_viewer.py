@@ -46,6 +46,8 @@ class ImageLoader(QMainWindow):
         self.detection_combos = []
         self.deletion_bounding_box_cords = []
         self.label_store = LabelStore()
+        self.model_verified = model_verified
+        self.model_discarded = model_discarded
         if model_verified:
             self.model_verified = model_verified
             #print("Model Verified Images")
@@ -106,6 +108,7 @@ class ImageLoader(QMainWindow):
         self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
+        self.nav_bar.newBatchClicked.connect(self.start_batch_prediction)
 
         # -----------------------------
         # Controls
@@ -317,7 +320,7 @@ class ImageLoader(QMainWindow):
         self.detection_combos.clear()
 
         for i, det in enumerate(detections):
-
+            
             item = QListWidgetItem()
             self.detection_editor.addItem(item)
 
@@ -435,8 +438,8 @@ class ImageLoader(QMainWindow):
             # Unverified images show current model predictions as a starting point.
             self.verified = False
             self.detections = self.labeler.get_detections(path)
-
-        self.populate_detections(self.detections, self.labels)
+        if self.detections:
+            self.populate_detections(self.detections, self.labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -636,8 +639,12 @@ class ImageLoader(QMainWindow):
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
-                    # print(f"Found file: {file_path}")
-                    imgs.append(file_path)
+                    
+                    valid_image = cv2.imread(file_path)
+                    if valid_image is not None:
+                        imgs.append(file_path)
+                    else:
+                        print(f"Skipping invalid image: {file_path}")
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
@@ -658,11 +665,15 @@ class ImageLoader(QMainWindow):
 
             if self.images:
                 self.image_list.setCurrentRow(0)
+                self.filter_dropdown.setCurrentIndex(0)
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
             
-            
+            if self.model_verified:
+                self.model_verified.clear()
+            if self.model_discarded:
+                self.model_discarded.clear()
             self.training_manager = TrainingManager(self.drive)
 
     def menu_window(self):
@@ -745,4 +756,11 @@ class ImageLoader(QMainWindow):
                     self.labels.append(line.strip())
         except Exception as e:
             print(e)
+
+    def start_batch_prediction(self):
+        from batch_prediction import BatchPrediction
+
+        self.predictionWindow = BatchPrediction(self.drive)
+        self.predictionWindow.show()
+        self.close()
     

@@ -1,18 +1,19 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QProgressBar,QApplication
 from PySide6.QtCore import Qt,QTimer
 import os
-from image_viewer import ImageLoader
 from nav_bar import NavBar
 from window_utils import center_on_primary_screen
 from model_prediction import ImageLabeler
+import cv2
 
 class BatchPrediction(QMainWindow):
-    def __init__(self,drive):
+    def __init__(self,drive,in_image_viewer=False):
         super().__init__()
         self.drive = drive
         self.images = []
         self.total_images = 0
         self.abort_requested = False
+        self.in_image_viewer = in_image_viewer
 
         self.resize(600, 200)
         self.setContentsMargins(0, 0, 0, 0)
@@ -85,9 +86,14 @@ class BatchPrediction(QMainWindow):
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
-                    #print(f"Found file: {file_path}")
-                    self.images.append(file_path)
-                    self.total_images +=1
+                    valid_image = cv2.imread(file_path)
+                    if valid_image is not None:
+                        self.images.append(file_path)
+                        self.total_images +=1
+                    else:
+                        print(f"Skipping invalid image: {file_path}")
+        
+    
   
     def predict_all_images(self):
         self.detections = []
@@ -101,7 +107,8 @@ class BatchPrediction(QMainWindow):
                 return
 
             det = self.labeler.get_conf_scores_single(img_path)
-            self.detections.append(det)
+            if det:
+                self.detections.append(det)
 
             # update progress
             percent = ((i + 1) / total) * 100
@@ -124,6 +131,8 @@ class BatchPrediction(QMainWindow):
             self.drive = pick_directory(self)
     
     def view_image_window(self):
+        from image_viewer import ImageLoader
+
         self.imageWindow = ImageLoader(self.drive,model_verified=self.model_verified,model_discarded=self.model_discarded)
         self.imageWindow.show()
         self.close()

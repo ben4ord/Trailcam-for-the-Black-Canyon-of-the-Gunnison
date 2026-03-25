@@ -4,7 +4,6 @@ from PySide6.QtCore import Qt
 from image_viewer import ImageLoader
 from nav_bar import NavBar
 from batch_prediction import BatchPrediction
-from train_model import TrainModel
 from window_utils import center_on_primary_screen
 
 class BatchWindow(QMainWindow):

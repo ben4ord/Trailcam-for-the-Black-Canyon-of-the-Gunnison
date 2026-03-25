@@ -4,11 +4,12 @@ from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
 import math
+import cv2
 
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
-        full_model_path = Path.cwd() /"Models/best_3-3-2026.pt"
+        full_model_path = Path.cwd() /"Models/best_3-24-2026.pt"
         # Model is loaded once so repeated image predictions are fast.
         self.model = YOLO(full_model_path)
 
@@ -24,6 +25,10 @@ class ImageLabeler:
     
     def get_detections(self, image_path: str) -> list[dict]:
         """Convert raw YOLO boxes into plain dictionaries for UI consumption."""
+        img = cv2.imread(image_path)
+        if img is None:
+            print(f"Skipping invalid image in predict: {image_path}")
+            return None  # CRITICAL
         result = self.predict(image_path)
         boxes = result.boxes
 
@@ -53,6 +58,7 @@ class ImageLabeler:
     
 
     def get_conf_scores_single(self, image_path):
+        
         results = self.model(image_path,verbose=False)
 
         r = results[0]
