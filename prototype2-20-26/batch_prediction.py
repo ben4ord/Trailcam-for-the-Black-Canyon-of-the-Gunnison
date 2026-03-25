@@ -15,6 +15,7 @@ class BatchPrediction(QMainWindow):
         self.abort_requested = False
 
         self.resize(600, 200)
+        self.setContentsMargins(0, 0, 0, 0)
 
         # This removes the original top navbar since we are using a custom one
         # Without this it adds the new nav bar under the original
@@ -24,13 +25,15 @@ class BatchPrediction(QMainWindow):
         self.nav_bar.set_button_visibility(
             home=False,
             update_labels=False,
-            new_folder=True
+            new_folder=False
         )
+        self.setMenuWidget(self.nav_bar)
 
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
         # central widget
         central_widget = QWidget(self)
+        central_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCentralWidget(central_widget)
         
         # creating layout
@@ -38,13 +41,14 @@ class BatchPrediction(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.setLayout(layout)
-        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
+
         # Progress bar for epoch tracking
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0.0%")
         layout.addWidget(self.progress_bar)
+
         # Abort Button
         self.abort_button = QPushButton("Abort")
         self.abort_button.clicked.connect(self.request_abort)
@@ -65,7 +69,7 @@ class BatchPrediction(QMainWindow):
 
     def start_processing(self):
         self.scan_folders_walk(self.drive)
-        print(f"Total Images Found {self.total_images}")
+        #print(f"Total Images Found {self.total_images}")
         self.labeler = ImageLabeler()
         self.predict_all_images()
         self.view_image_window()
@@ -74,14 +78,14 @@ class BatchPrediction(QMainWindow):
     #Collect all images in folder and subfolders
     def scan_folders_walk(self,path):
         for root, dirs, files in os.walk(path):
-            print(f"Current directory: {root}")
-            print(f"Subdirectories: {dirs}")
-            print(f"Files: {files}")
+            #print(f"Current directory: {root}")
+            #print(f"Subdirectories: {dirs}")
+            #print(f"Files: {files}")
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
-                    print(f"Found file: {file_path}")
+                    #print(f"Found file: {file_path}")
                     self.images.append(file_path)
                     self.total_images +=1
   
@@ -93,7 +97,7 @@ class BatchPrediction(QMainWindow):
         for i, img_path in enumerate(self.images):
             # Check abort flag
             if self.abort_requested:
-                print("Prediction aborted")
+                #print("Prediction aborted")
                 return
 
             det = self.labeler.get_conf_scores_single(img_path)
@@ -125,6 +129,6 @@ class BatchPrediction(QMainWindow):
         self.close()
                     
     def request_abort(self):
-        print("Abort requested")
+        #print("Abort requested")
         self.abort_requested = True
             

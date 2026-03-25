@@ -24,11 +24,13 @@ class BatchWindow(QMainWindow):
             update_labels=False,
             new_folder=True
         )
+        self.setMenuWidget(self.nav_bar)
 
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
         # central widget
         central_widget = QWidget(self)
+        central_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCentralWidget(central_widget)
         
         # creating layout
@@ -36,8 +38,6 @@ class BatchWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.setLayout(layout)
-
-        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
         
         # Add button to next window
         self.viewImages = QPushButton('View Images')

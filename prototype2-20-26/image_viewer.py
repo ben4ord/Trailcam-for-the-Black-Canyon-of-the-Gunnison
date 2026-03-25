@@ -48,12 +48,12 @@ class ImageLoader(QMainWindow):
         self.label_store = LabelStore()
         if model_verified:
             self.model_verified = model_verified
-            print("Model Verified Images")
-            print(self.model_verified)
+            #print("Model Verified Images")
+            #print(self.model_verified)
         if model_discarded:
             self.model_discarded = model_discarded
-            print("Model Discared Images")
-            print(self.model_discarded)
+            #print("Model Discared Images")
+            #print(self.model_discarded)
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
@@ -629,8 +629,8 @@ class ImageLoader(QMainWindow):
             self.deletion_bounding_box_cords.clear()
         imgs = []
         for root, dirs, files in os.walk(path):
-            print(f"Current directory: {root}")
-            print(f"Subdirectories: {dirs}")
+            #print(f"Current directory: {root}")
+            #print(f"Subdirectories: {dirs}")
             # print(f"Files: {files}")
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
