@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 from home_menu import MenuWindow
 from nav_bar import NavBar
 from window_utils import center_on_primary_screen, pick_directory
-
+from pathlib import Path
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
     def next_window(self):
         if not self.dir_name_edit.text():
             return
-
+        self.ensure_delete_folder()
         self.nextWindow = MenuWindow(self.dir_name_edit.text())
         self.nextWindow.show()
         self.close()
@@ -73,6 +73,17 @@ class MainWindow(QMainWindow):
     def center_window(self):
         center_on_primary_screen(self)
 
+    from pathlib import Path
+
+    def ensure_delete_folder(self):
+        root = Path(self.dir_name_edit.text()).anchor
+        target_path = Path(root) / "Recently Deleted"
+
+        if not target_path.exists():
+            target_path.mkdir()
+            print(f"Created folder at: {target_path.resolve()}")
+        else:
+            print(f"Folder already exists at: {target_path.resolve()}")
 
 if __name__ == '__main__':
     # Look for training in the background 
