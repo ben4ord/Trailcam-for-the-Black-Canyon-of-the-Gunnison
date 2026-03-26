@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 from pathlib import Path
 from PySide6.QtCore import Qt
+from collapsiblepane import CollapsiblePane
 import qtawesome as qta
 from nav_bar import NavBar
 from label_store import LabelStore
@@ -53,13 +54,25 @@ class LabelEditor(QDialog):
         # -----------------------------
         # Left Panel
         # -----------------------------
+
+        # --- Collapsible Section ---
+        self.active_labels = CollapsiblePane("Active Labels")
+        self.inactive_labels = CollapsiblePane("Inactive Labels")
+
+        # Create content for the collapsible section
         left_panel = QVBoxLayout()
-        self.label_list = QListWidget()
+        self.active_label_list = QListWidget()
+        self.inactive_label_list = QListWidget()
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search labels...")
         self.search_box.setClearButtonEnabled(True)
+
+        self.active_labels.set_content_widget(self.active_label_list)
+        self.inactive_labels.set_content_widget(self.inactive_label_list)
+
         left_panel.addWidget(self.search_box)
-        left_panel.addWidget(self.label_list)
+        left_panel.addWidget(self.active_labels)
+        left_panel.addWidget(self.inactive_labels)
 
         # -----------------------------
         # Right Panel
@@ -152,7 +165,8 @@ class LabelEditor(QDialog):
 
         # Load labels, connect buttons
         self.load_labels()
-        self.label_list.itemClicked.connect(self.on_label_clicked)
+        self.active_label_list.itemClicked.connect(self.on_label_clicked)
+        self.inactive_label_list.itemClicked.connect(self.on_label_clicked)
         self.search_box.textChanged.connect(self.filter_list)
         self.add_button.clicked.connect(self.show_input)
         self.confirm_button.clicked.connect(self.confirm_add)
@@ -166,22 +180,32 @@ class LabelEditor(QDialog):
     # -----------------------------
 
     def load_labels(self):
-        labels = self.label_store.read_active_labels()
-        if not labels:
-            if not self.label_store.classes_path.exists():
-                self.label_list.addItem(QListWidgetItem("No label file found"))
-            return
-        sorted_labels = sorted(labels, key=lambda x: x.lower())
-        for label in sorted_labels:
-            self.label_list.addItem(QListWidgetItem(label))
+        active_labels = self.label_store.read_active_labels()
+        inactive_labels = self.label_store.read_inactive_labels()
+        if not self.label_store.classes_path.exists():
+            self.active_label_list.addItem(QListWidgetItem("No label file found"))
+        else:
+            active_sorted_labels = sorted(active_labels, key=lambda x: x.lower())
+            for label in active_sorted_labels:
+                self.active_label_list.addItem(QListWidgetItem(label))
+
+        if not self.label_store.inactive_labels_path.exists():
+            self.inactive_label_list.addItem(QListWidgetItem("No label file found"))
+        else:
+            inactive_sorted_labels = sorted(inactive_labels, key=lambda x: x.lower())
+            for label in inactive_sorted_labels:
+                self.inactive_label_list.addItem(QListWidgetItem(label))
 
     def on_label_clicked(self, item):
         self.selected_label.setText(item.text())
 
     def filter_list(self, text):
         text = text.lower()
-        for row in range(self.label_list.count()):
-            item = self.label_list.item(row)
+        for row in range(self.active_label_list.count()):
+            item = self.active_label_list.item(row)
+            item.setHidden(text not in item.text().lower())
+        for row in range(self.inactive_label_list.count()):
+            item = self.inactive_label_list.item(row)
             item.setHidden(text not in item.text().lower())
 
     def show_input(self):
@@ -189,40 +213,42 @@ class LabelEditor(QDialog):
         self.stack.setCurrentIndex(1) #show label input page
 
     def cancel_input(self):
-        self.label_list.setEnabled(True)
+        self.active_label_list.setEnabled(True)
         self.stack.setCurrentIndex(0) #go back to label viewing
 
     def confirm_add(self):
         new_label = self.new_label_input.text().strip()
         if new_label:
             self.label_store.add_label(new_label) # calls the function in label_store to actually save the label in the files
-            self.label_list.clear()
+            self.active_label_list.clear()
+            self.inactive_label_list.clear()
             self.load_labels()
 
         self.stack.setCurrentIndex(0) #go back to label viewing
 
     def edit_label(self):
-        current_item = self.label_list.currentItem() #get currently selected label 
+        current_item = self.active_label_list.currentItem() #get currently selected label 
         if not current_item:
             return
         self.edit_label_input.setText(current_item.text()) #set edit label page text
-        self.label_list.setEnabled(False) #disable label list to prevent changing incorrect label bug
+        self.active_label_list.setEnabled(False) #disable label list to prevent changing incorrect label bug
         self.stack.setCurrentIndex(2) #show edit page
 
     def confirm_edit(self):
         new_text = self.edit_label_input.text().strip() #get text from edit label input
-        current_item = self.label_list.currentItem() #get currently selected label in list (before edit)
+        current_item = self.active_label_list.currentItem() #get currently selected label in list (before edit)
         if new_text and current_item:
             old_label = current_item.text()
             self.label_store.update_label(old_label, new_text) # calls the label_store function to update the label appropriately in the files
-            self.label_list.clear()
+            self.active_label_list.clear()
+            self.inactive_label_list.clear()
             self.load_labels()
             self.selected_label.setText(new_text)
-        self.label_list.setEnabled(True)
+        self.active_label_list.setEnabled(True)
         self.stack.setCurrentIndex(0)
 
     def delete_label(self):
-        current_item = self.label_list.currentItem()
+        current_item = self.active_label_list.currentItem()
         if not current_item:
             return
         
@@ -235,6 +261,7 @@ class LabelEditor(QDialog):
             return
     
         self.label_store.remove_label(current_item.text())
-        self.label_list.clear()
+        self.active_label_list.clear()
+        self.inactive_label_list.clear()
         self.load_labels()
         self.selected_label.setText("No label selected")
