@@ -168,12 +168,14 @@ class LabelEditor(QDialog):
         self.active_label_list.itemClicked.connect(self.on_label_clicked)
         self.inactive_label_list.itemClicked.connect(self.on_label_clicked)
         self.search_box.textChanged.connect(self.filter_list)
-        self.add_button.clicked.connect(self.show_input)
+        self.add_button.clicked.connect(self.handle_add_or_activate)
         self.confirm_button.clicked.connect(self.confirm_add)
         self.cancel_button.clicked.connect(self.cancel_input)
         self.edit_button.clicked.connect(self.edit_label)
         self.delete_button.clicked.connect(self.delete_label)
         self.edit_confirm_button.clicked.connect(self.confirm_edit)
+        self.delete_button.setEnabled(False)
+        self.edit_button.setEnabled(False)
 
     # -----------------------------
     # Label Functions
@@ -198,6 +200,19 @@ class LabelEditor(QDialog):
 
     def on_label_clicked(self, item):
         self.selected_label.setText(item.text())
+        list_widget = item.listWidget()
+        if list_widget is self.inactive_label_list:
+            self.active_label_list.clearSelection()
+            self.delete_button.setEnabled(False)
+            self.edit_button.setEnabled(False)
+            self.add_button.setIcon(qta.icon('fa6s.rotate-left'))
+            self.add_button.setToolTip('Activate Label')
+        else:
+            self.inactive_label_list.clearSelection()
+            self.delete_button.setEnabled(True)
+            self.edit_button.setEnabled(True)
+            self.add_button.setIcon(qta.icon('fa6s.plus'))
+            self.add_button.setToolTip('Add Label')
 
     def filter_list(self, text):
         text = text.lower()
@@ -211,6 +226,25 @@ class LabelEditor(QDialog):
     def show_input(self):
         self.new_label_input.clear()
         self.stack.setCurrentIndex(1) #show label input page
+
+    def handle_add_or_activate(self):
+        inactive_item = self.inactive_label_list.currentItem()
+        if inactive_item:
+            label = inactive_item.text()
+            self.label_store.activate_label(label)
+            self.active_label_list.clear()
+            self.inactive_label_list.clear()
+            self.load_labels()
+            self.selected_label.setText(label)
+            matches = self.active_label_list.findItems(label, Qt.MatchExactly)
+            if matches:
+                self.active_label_list.setCurrentItem(matches[0])
+            self.delete_button.setEnabled(True)
+            self.edit_button.setEnabled(True)
+            self.add_button.setIcon(qta.icon('fa6s.plus'))
+            self.add_button.setToolTip('Add Label')
+            return
+        self.show_input()
 
     def cancel_input(self):
         self.active_label_list.setEnabled(True)

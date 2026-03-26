@@ -78,6 +78,16 @@ class LabelStore:
         inactive.add(label)
         self.write_inactive_labels(self.inactive_in_class_order(labels, inactive))
 
+    def activate_label(self, label: str) -> None:
+        labels = self.read_labels()
+        if label not in labels:
+            return
+        inactive = set(self.read_inactive_labels())
+        if label not in inactive:
+            return
+        inactive.remove(label)
+        self.write_inactive_labels(self.inactive_in_class_order(labels, inactive))
+
     def rename_inactive_label(self, old_label: str, new_label: str, labels: list[str]) -> None:
         inactive = set(self.read_inactive_labels())
         if old_label not in inactive:
