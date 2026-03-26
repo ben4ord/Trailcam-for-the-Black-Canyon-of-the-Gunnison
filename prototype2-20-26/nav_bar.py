@@ -1,6 +1,5 @@
 from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
-
 import qtawesome as qta
 from training_session import get_training_session
 
@@ -9,6 +8,7 @@ class NavBar(QWidget):
     homeClicked = Signal()
     updateLabelsClicked = Signal()
     newFolderClicked = Signal()
+    newBatchClicked = Signal()
 
     def __init__(self, parent_window):
         super().__init__()
@@ -47,6 +47,12 @@ class NavBar(QWidget):
         self.new_folder_btn.setIcon(qta.icon('fa6s.folder'))
         self.new_folder_btn.setToolTip("Select New Directory")
         self.new_folder_btn.clicked.connect(self.newFolderClicked.emit)
+        
+        # Do new batch prediction 
+        self.new_batch_btn = QPushButton()
+        self.new_batch_btn.setIcon(qta.icon('fa6s.object-group'))
+        self.new_batch_btn.setToolTip("New Batch Prediction")
+        self.new_batch_btn.clicked.connect(self.newBatchClicked.emit)
 
         # Training status button
         self.training_status_btn = QPushButton("Training: Idle")
@@ -59,6 +65,7 @@ class NavBar(QWidget):
         layout.addWidget(self.home_btn)
         layout.addWidget(self.update_labels_btn)
         layout.addWidget(self.new_folder_btn)
+        layout.addWidget(self.new_batch_btn)
         layout.addWidget(self.training_status_btn)
 
         layout.addStretch()
@@ -172,11 +179,12 @@ class NavBar(QWidget):
     
     # certain windows don't need all the nav bar buttons visible
     # this function allows them to decide which ones they want to see (all are true by default)
-    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, training_status=True):
+    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, training_status=True,batch_status=False):
         self.home_btn.setVisible(home)
         self.update_labels_btn.setVisible(update_labels)
         self.new_folder_btn.setVisible(new_folder)
         self.training_status_btn.setVisible(training_status)
+        self.new_batch_btn.setVisible(batch_status)
 
     # we need to modify the training status based on the session tracking for training
     # this function will refresh the training status based on the snapshot generated (this is explained more in the training_session file)

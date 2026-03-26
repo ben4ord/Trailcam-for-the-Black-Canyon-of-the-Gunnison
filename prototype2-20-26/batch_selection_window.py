@@ -1,12 +1,12 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
 from PySide6.QtCore import Qt
 
-from batch_selection_window import BatchWindow
+from image_viewer import ImageLoader
 from nav_bar import NavBar
-from train_model import TrainModel
+from batch_prediction import BatchPrediction
 from window_utils import center_on_primary_screen
 
-class MenuWindow(QMainWindow):
+class BatchWindow(QMainWindow):
     def __init__(self,drive):
         super().__init__()
         self.drive = drive
@@ -23,11 +23,13 @@ class MenuWindow(QMainWindow):
             update_labels=False,
             new_folder=True
         )
+        self.setMenuWidget(self.nav_bar)
 
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
         # central widget
         central_widget = QWidget(self)
+        central_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCentralWidget(central_widget)
         
         # creating layout
@@ -35,33 +37,31 @@ class MenuWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.setLayout(layout)
-
-        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
         
         # Add button to next window
         self.viewImages = QPushButton('View Images')
-        self.viewImages.clicked.connect(self.batch_selection_window)
-        layout.addWidget(self.viewImages, 1, 0, 2, 6)
+        self.viewImages.clicked.connect(self.view_image_window)
+        layout.addWidget(self.viewImages, 2, 0)
 
         # Add button for training new model
-        self.trainModel = QPushButton('Train Model')
-        self.trainModel.clicked.connect(self.train_model_window)
-        layout.addWidget(self.trainModel, 2, 0, 2, 6)
+        self.trainModel = QPushButton('Batch Training')
+        self.trainModel.clicked.connect(self.start_batch_prediction)
+        layout.addWidget(self.trainModel, 2, 1)
 
         center_on_primary_screen(self)
         self.show()
 
 
-    def batch_selection_window(self):
-        self.imageWindow = BatchWindow(self.drive)
+    def view_image_window(self):
+        self.imageWindow = ImageLoader(self.drive)
         self.imageWindow.show()
         self.close()
 
-    def train_model_window(self):
-        self.imageWindow = TrainModel(self.drive)
-        self.imageWindow.show()
+    def start_batch_prediction(self):
+        self.predictionWindow = BatchPrediction(self.drive)
+        self.predictionWindow.show()
         self.close()
-
+    
     def open_dir_dialog(self):
         from window_utils import pick_directory
         self.drive = pick_directory(self)

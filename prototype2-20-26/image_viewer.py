@@ -30,7 +30,7 @@ from window_utils import pick_directory, center_on_primary_screen
 
 
 class ImageLoader(QMainWindow):
-    def __init__(self, drive):
+    def __init__(self, drive,model_verified=None,model_discarded=None):
         super().__init__()
 
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -49,6 +49,16 @@ class ImageLoader(QMainWindow):
         self.detection_combos = []
         self.deletion_bounding_box_cords = []
         self.label_store = LabelStore()
+        self.model_verified = model_verified
+        self.model_discarded = model_discarded
+        if model_verified:
+            self.model_verified = model_verified
+            #print("Model Verified Images")
+            #print(self.model_verified)
+        if model_discarded:
+            self.model_discarded = model_discarded
+            #print("Model Discared Images")
+            #print(self.model_discarded)
         self.current_base_bgr = None
         self.current_unverified_bgr = None
         self.current_image_path = None
@@ -104,6 +114,7 @@ class ImageLoader(QMainWindow):
         self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
+        self.nav_bar.newBatchClicked.connect(self.start_batch_prediction)
 
         # -----------------------------
         # Controls
@@ -128,7 +139,10 @@ class ImageLoader(QMainWindow):
         self.filter_dropdown.addItems([
             "All Images",
             "Verified Only",
-            "Unverified Only"
+            "Unverified Only",
+            "Model Verified",
+            "Model Discarded",
+            "Recently Deleted"
         ])
         self.filter_dropdown.currentIndexChanged.connect(
             self.on_image_filter_changed
@@ -320,7 +334,7 @@ class ImageLoader(QMainWindow):
         )
 
         for i, det in enumerate(detections):
-
+            
             item = QListWidgetItem()
             self.detection_editor.addItem(item)
 
@@ -468,8 +482,8 @@ class ImageLoader(QMainWindow):
             result = self.labeler.predict(path)
             self.detections = self.labeler.detections_from_result(result)
             self.current_unverified_bgr = result.plot()
-
-        self.populate_detections(self.detections, self.active_labels)
+        if self.detections:
+            self.populate_detections(self.detections, self.active_labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -501,10 +515,17 @@ class ImageLoader(QMainWindow):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
-
+ 
         if self.current_base_bgr is None and self.current_unverified_bgr is None:
             return
 
+        if self.current_index < self.image_list.count():
+            self.image_list.setCurrentRow(self.current_index)
+
+        if cv2.imread(path) is None:
+            self.image_label.setText("Unable to load image")
+            return
+            
         if self.verified:
             if self.current_base_bgr is None:
                 self.image_label.setText("Unable to load image")
@@ -530,13 +551,21 @@ class ImageLoader(QMainWindow):
                     cv2.LINE_AA,
                 )
         else:
+            # Unverified images should keep YOLO's native plotting behavior.
+            labeled_image = self.labeler.label_image(path)
+            if labeled_image is not None:
+                color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
+            else:
+                self.image_label.setText("Unable to load image")
+                return
+        
             if self.current_unverified_bgr is None:
                 self.image_label.setText("Unable to load image")
                 return
 
             # Unverified images: keep YOLO's native plot styling.
             image = self.current_unverified_bgr.copy()
-        
+
         # Draw box around users selected object
         if selection:
             if self.verified:
@@ -562,9 +591,6 @@ class ImageLoader(QMainWindow):
         )
 
         self.image_label.setPixmap(scaled_pixmap)
-        
-        if self.current_index < self.image_list.count():
-            self.image_list.setCurrentRow(self.current_index)
 
         if self.verified:
             self.verification_status.setText("Verified")
@@ -642,27 +668,24 @@ class ImageLoader(QMainWindow):
         self.image_label.setStyleSheet("")
         self.refresh_filter(keep_current=True) # refresh the current image after we unverify it
   
-
-    def get_imgs(self, drive, new_dir=False):
+    def get_imgs(self,path,new_dir=False):
         if(new_dir):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
         imgs = []
-        if os.path.exists(drive):
-            for filename in os.listdir(drive):
-                # Check for image extension AND ensure it doesn't start with '.'
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
-                    if not filename.startswith('.'): 
-                        img_path = os.path.join(drive, filename)   
-                        imgs.append(img_path)
-
+        for root, dirs, files in os.walk(path):
+            for file in files:
+                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+                    # Get the full path of the file
+                    file_path = os.path.join(root, file)
+                    imgs.append(file_path)
+    
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
             show_no_images_popup(self)
             return
-
-        return 
+        return
     
     def open_dir_dialog(self):
         dir_name = pick_directory(self, "Select a Directory")
@@ -677,12 +700,16 @@ class ImageLoader(QMainWindow):
 
             if self.images:
                 self.image_list.setCurrentRow(0)
+                self.filter_dropdown.setCurrentIndex(0)
                 self.load_current_image_data()
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
             
-            
+            if self.model_verified:
+                self.model_verified.clear()
+            if self.model_discarded:
+                self.model_discarded.clear()
             self.training_manager = TrainingManager(self.drive)
 
     def menu_window(self):
@@ -713,8 +740,14 @@ class ImageLoader(QMainWindow):
             mode = "all"
         elif index == 1:
             mode = "verified"
-        else:
+        elif index == 2:
             mode = "unverified"
+        elif index == 3:
+            mode = "model_verified"
+        elif index == 4:
+            mode = "model_discarded"
+        elif index == 5:
+            mode = "recently_deleted"
 
         self.apply_filter(mode)
 
@@ -727,6 +760,7 @@ class ImageLoader(QMainWindow):
         if keep_current and self.filtered_images and 0 <= self.current_index < len(self.filtered_images):
             current_path = self.filtered_images[self.current_index]
 
+        self.filtered_images.clear()
         if self.filter_mode == "all":
             self.filtered_images = list(self.images)
         elif self.filter_mode == "verified":
@@ -737,6 +771,18 @@ class ImageLoader(QMainWindow):
         elif self.filter_mode == "unverified":
             self.filtered_images = [
                 img for img in self.images
+                if not self.training_manager.is_verified_cached(img)
+            ]
+        elif self.filter_mode == "model_verified":
+            if self.model_verified:
+                for det in self.model_verified:
+                    path = det["image_path"]
+                    if not self.training_manager.is_verified_cached(path):
+                        self.filtered_images.append(path)
+                                   
+        elif self.filter_mode == "model_discarded":
+            self.filtered_images = [
+                img for img in self.model_discarded
                 if not self.training_manager.is_verified_cached(img)
             ]
 
@@ -762,4 +808,11 @@ class ImageLoader(QMainWindow):
         self.active_labels.extend(
             [label for label in labels if label not in inactive]
         )
+    
+    def start_batch_prediction(self):
+        from batch_prediction import BatchPrediction
+
+        self.predictionWindow = BatchPrediction(self.drive)
+        self.predictionWindow.show()
+        self.close()
     

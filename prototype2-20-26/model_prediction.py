@@ -3,6 +3,8 @@
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
+import math
+import cv2
 
 class ImageLabeler:
     def __init__(self):
@@ -13,16 +15,27 @@ class ImageLabeler:
 
     def predict(self, image_path: str):
         """Run inference and return first result object for a single image path."""
-        results = self.model(image_path, verbose=False)
-        return results[0]
+        if self.check_image_corruption(image_path):
+            results = self.model(image_path, verbose=False)
+            return results[0]
+        else:
+            return None
 
    
     def label_image(self, image_path: str) -> np.ndarray:
         """Return image array with YOLO-drawn boxes/labels."""
-        return self.predict(image_path).plot()
+        prediction = self.predict(image_path)
+        if prediction is not None:
+            return prediction.plot()
+        else:
+            return None
     
     def get_detections(self, image_path: str) -> list[dict]:
-        """Run inference and convert YOLO boxes into plain dictionaries."""
+        """Convert raw YOLO boxes into plain dictionaries for UI consumption."""
+        img = cv2.imread(image_path)
+        if img is None:
+            print(f"Skipping invalid image in predict: {image_path}")
+            return None  # CRITICAL
         result = self.predict(image_path)
         return self.detections_from_result(result)
 
@@ -54,6 +67,28 @@ class ImageLabeler:
 
         return detections
     
+
+    def get_conf_scores_single(self, image_path):
+        if self.check_image_corruption(image_path):
+            results = self.model(image_path,verbose=False)
+
+            r = results[0]
+
+            if r.boxes is None or len(r.boxes) == 0:
+                return {"class_ids": [], "confidences": []}
+            
+
+            return {
+                "class_ids": r.boxes.cls.tolist(),
+                "confidences": r.boxes.conf.tolist(),
+                "bbox_xyxy": r.boxes.xyxy.tolist(),
+                "bbox_xywhn": r.boxes.xywhn.tolist(),
+                "image_path": image_path
+            }
+        else:
+            return None
+
+    
     
     @staticmethod
     def to_yolo_label_lines(detections) -> list[str]:
@@ -76,3 +111,11 @@ class ImageLabeler:
             )
 
         return lines
+    
+    def check_image_corruption(self, image_path):
+        valid_image = cv2.imread(image_path)
+        if valid_image is None:
+            return False
+        else:
+            return True
+
