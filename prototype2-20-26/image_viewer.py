@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
+import numpy as np
+from numpy.typing import NDArray
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -59,8 +61,8 @@ class ImageLoader(QMainWindow):
             self.model_discarded = model_discarded
             #print("Model Discared Images")
             #print(self.model_discarded)
-        self.current_base_bgr = None
-        self.current_unverified_bgr = None
+        self.current_base_bgr: np.ndarray | None = None
+        self.current_unverified_bgr: np.ndarray | None = None
         self.current_image_path = None
 
         # Load dataset BEFORE UI filtering
@@ -480,8 +482,24 @@ class ImageLoader(QMainWindow):
             # Unverified images show current model predictions as a starting point.
             self.verified = False
             result = self.labeler.predict(path)
-            self.detections = self.labeler.detections_from_result(result)
-            self.current_unverified_bgr = result.plot()
+            if result is None:
+                # Prediction failed or returned nothing
+                self.detections = []
+                self.current_unverified_bgr = None
+            else:
+                self.detections = self.labeler.detections_from_result(result)
+                # Safely call plot() if available; otherwise fall back to None
+                if hasattr(result, "plot") and callable(result.plot):
+                    try:
+                        plotted = result.plot()
+                        if isinstance(plotted, np.ndarray):
+                            self.current_unverified_bgr = plotted
+                        else:
+                            self.current_unverified_bgr = None
+                    except Exception:
+                        self.current_unverified_bgr = None
+                else:
+                    self.current_unverified_bgr = None
         if self.detections:
             self.populate_detections(self.detections, self.active_labels)
 
@@ -522,10 +540,8 @@ class ImageLoader(QMainWindow):
         if self.current_index < self.image_list.count():
             self.image_list.setCurrentRow(self.current_index)
 
-        if cv2.imread(path) is None:
-            self.image_label.setText("Unable to load image")
-            return
-            
+        # At this point either current_base_bgr or current_unverified_bgr is available,
+        # so there's no need to re-read the image from disk here.
         if self.verified:
             if self.current_base_bgr is None:
                 self.image_label.setText("Unable to load image")
@@ -552,13 +568,16 @@ class ImageLoader(QMainWindow):
                 )
         else:
             # Unverified images should keep YOLO's native plotting behavior.
-            labeled_image = self.labeler.label_image(path)
+            if self.current_image_path is None:
+                self.image_label.setText("Unable to load image")
+                return
+            labeled_image = self.labeler.label_image(str(self.current_image_path))
             if labeled_image is not None:
                 color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
             else:
                 self.image_label.setText("Unable to load image")
                 return
-        
+
             if self.current_unverified_bgr is None:
                 self.image_label.setText("Unable to load image")
                 return
@@ -735,10 +754,10 @@ class ImageLoader(QMainWindow):
     # Filtering functions
     # -----------------------------
     def on_image_filter_changed(self, index):
+        mode = "all"
+
         # Map dropdown index to filter mode
-        if index == 0:
-            mode = "all"
-        elif index == 1:
+        if index == 1:
             mode = "verified"
         elif index == 2:
             mode = "unverified"
@@ -781,10 +800,14 @@ class ImageLoader(QMainWindow):
                         self.filtered_images.append(path)
                                    
         elif self.filter_mode == "model_discarded":
-            self.filtered_images = [
-                img for img in self.model_discarded
-                if not self.training_manager.is_verified_cached(img)
-            ]
+            if self.model_discarded:
+                # model_discarded may be None; only iterate if it's truthy
+                self.filtered_images = [
+                    img for img in self.model_discarded
+                    if not self.training_manager.is_verified_cached(img)
+                ]
+            else:
+                self.filtered_images = []
 
         if current_path and current_path in self.filtered_images:
             self.current_index = self.filtered_images.index(current_path)
