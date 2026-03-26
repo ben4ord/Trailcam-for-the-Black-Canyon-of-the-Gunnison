@@ -92,7 +92,8 @@ class NavBar(QWidget):
         self.installEventFilter(self)
 
         self.training_status_timer = QTimer(self)
-        self.training_status_timer.setInterval(1000)
+        # Poll less frequently to avoid UI stutter on slower disks.
+        self.training_status_timer.setInterval(10000)
         self.training_status_timer.timeout.connect(self.refresh_training_status)
         self.training_status_timer.start()
         self.refresh_training_status()

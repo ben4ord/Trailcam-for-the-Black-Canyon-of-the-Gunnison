@@ -586,13 +586,6 @@ class ImageLoader(QMainWindow):
             if self.current_image_path is None:
                 self.image_label.setText("Unable to load image")
                 return
-            labeled_image = self.labeler.label_image(str(self.current_image_path))
-            if labeled_image is not None:
-                color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
-            else:
-                self.image_label.setText("Unable to load image")
-                return
-
             if self.current_unverified_bgr is None:
                 self.image_label.setText("Unable to load image")
                 return
