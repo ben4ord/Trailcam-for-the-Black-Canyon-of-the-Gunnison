@@ -181,6 +181,7 @@ class ImageLoader(QMainWindow):
         QShortcut(Qt.Key_Left, self, self.previous_image) # type: ignore
         QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
         QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
+        QShortcut(Qt.Key_Backspace, self, self.delete_image) # type: ignore
 
         # -----------------------------
         # Layout placement
@@ -251,7 +252,7 @@ class ImageLoader(QMainWindow):
     def load_image_list(self):
         self.image_list.clear()
 
-        for image in self.filtered_images:
+        for image in self.filtered_images: #type: ignore
             item = QListWidgetItem(Path(image).name)
             item.setData(Qt.UserRole, image) # type: ignore
             self.image_list.addItem(item)
@@ -280,7 +281,7 @@ class ImageLoader(QMainWindow):
         ):
             return
 
-        file_path = self.filtered_images[self.current_index]
+        file_path = self.filtered_images[self.current_index] #type: ignore
 
         if Path(file_path).is_file():
             self.move_to_recently_deleted(file_path)
@@ -790,7 +791,7 @@ class ImageLoader(QMainWindow):
         if keep_current and self.filtered_images and 0 <= self.current_index < len(self.filtered_images):
             current_path = self.filtered_images[self.current_index]
 
-        self.filtered_images.clear()
+        self.filtered_images.clear() #type: ignore
         self.delete_button.setVisible(True)
         if self.filter_mode == "all":
             self.filtered_images = list(self.images)
@@ -809,7 +810,7 @@ class ImageLoader(QMainWindow):
                 for det in self.model_verified:
                     path = det["image_path"]
                     if not self.training_manager.is_verified_cached(path):
-                        self.filtered_images.append(path)                     
+                        self.filtered_images.append(path) #type: ignore                   
         elif self.filter_mode == "model_discarded":
             if self.model_discarded:
                 # model_discarded may be None; only iterate if it's truthy
@@ -826,7 +827,7 @@ class ImageLoader(QMainWindow):
             self.delete_button.setVisible(False)
 
         if current_path and current_path in self.filtered_images:
-            self.current_index = self.filtered_images.index(current_path)
+            self.current_index = self.filtered_images.index(current_path) #type: ignore
         else:
             self.current_index = 0
 
