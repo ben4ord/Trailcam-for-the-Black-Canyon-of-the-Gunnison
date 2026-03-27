@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from PIL import Image
 import cv2
+import numpy as np
+from numpy.typing import NDArray
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -26,6 +28,7 @@ from label_editor import LabelEditor
 from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
 from window_utils import pick_directory, center_on_primary_screen
+import shutil
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive,model_verified=None,model_discarded=None):
@@ -41,6 +44,7 @@ class ImageLoader(QMainWindow):
         self.images = []
         self.filtered_images = []
         self.labels = []
+        self.active_labels = []
         self.drive = drive
         self.detections = []
         self.detection_combos = []
@@ -56,6 +60,9 @@ class ImageLoader(QMainWindow):
             self.model_discarded = model_discarded
             #print("Model Discared Images")
             #print(self.model_discarded)
+        self.current_base_bgr: np.ndarray | None = None
+        self.current_unverified_bgr: np.ndarray | None = None
+        self.current_image_path = None
 
         # Load dataset BEFORE UI filtering
         self.get_imgs(self.drive, new_dir=True)
@@ -268,31 +275,48 @@ class ImageLoader(QMainWindow):
         if not confirm_action(
             self,
             "Confirm Image Deletion?",
-            "Delete this image? (This could take a minute)",
+            "Delete this image? (This could take a minute)\n(Image will be moved to Recently Deleted folder)",
             self.confirm_toggle.isChecked()
         ):
             return
 
         file_path = self.filtered_images[self.current_index]
 
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
+        if Path(file_path).is_file():
+            self.move_to_recently_deleted(file_path)
+            
         self.get_imgs(self.drive, True)
         self.image_list.takeItem(self.current_index)
 
         show_info(
             self,
             "Image Deleted",
-            f"Deleted from:\n{file_path}\n"
+            f"Deleted from:\n{file_path}\n Move to Recently Deleted Folder"
         )
 
         if self.images:
             self.current_index = min(self.current_index, len(self.images) - 1)
+            self.load_current_image_data()
             self.update_display()
         else:
             self.current_index = -1
             show_no_images_popup(self)
+
+    def move_to_recently_deleted(self,original_path_str):
+        original_path = Path(original_path_str)
+        # Extract drive root ("E:\\")
+        root = Path(original_path.anchor)
+        # Define new root
+        deleted_root = root / "Recently Deleted"
+        # Get path relative to root
+        relative_path = original_path.relative_to(root)
+        # Build new destination path
+        destination = deleted_root / relative_path
+        # Ensure directory structure exists
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        # Move the file
+        shutil.move(str(original_path), str(destination))
+        print(f"Moved to: {destination}")
 
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
@@ -320,6 +344,12 @@ class ImageLoader(QMainWindow):
         self.detection_editor.clear()
         self.detection_combos.clear()
 
+        label_id_map = {name: idx for idx, name in enumerate(self.labels)}
+        sorted_options = sorted(
+            [(name, label_id_map[name]) for name in class_list if name in label_id_map],
+            key=lambda item: item[0].lower(),
+        )
+
         for i, det in enumerate(detections):
             
             item = QListWidgetItem()
@@ -340,8 +370,18 @@ class ImageLoader(QMainWindow):
                 lambda _, det=det: self.delete_detection_object(det)
             )
             combo = QComboBox()
-            combo.addItems(class_list)
-            combo.setCurrentText(det["class_name"])
+            options = list(sorted_options)
+            if det["class_name"] not in label_id_map:
+                options.insert(0, (det["class_name"], det["class_id"]))
+
+            for name, class_id in options:
+                combo.addItem(name, class_id)
+
+            current_index = combo.findData(det["class_id"])
+            if current_index >= 0:
+                combo.setCurrentIndex(current_index)
+            else:
+                combo.setCurrentText(det["class_name"])
             combo.currentTextChanged.connect(
                 lambda text, i=i: self.on_detection_label_change(i,text)
             )
@@ -366,7 +406,7 @@ class ImageLoader(QMainWindow):
         # Refresh UI
         self.populate_detections(
             self.detections,
-            self.labels
+            self.active_labels
         )
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
@@ -378,13 +418,15 @@ class ImageLoader(QMainWindow):
         train_image_path = self.training_manager.generate_train_name(source_path)
         return self.training_manager.labels_dir / f"{Path(train_image_path).stem}.txt"
 
-    def load_detections_from_label_file(self, image_path, label_path):
+    def load_detections_from_label_file(self, image_path, label_path, image_shape=None):
         """Load YOLO txt labels and convert normalized boxes back to pixel boxes."""
-        image = cv2.imread(image_path)
-        if image is None:
-            return []
-
-        img_h, img_w = image.shape[:2]
+        if image_shape is None:
+            image = cv2.imread(image_path)
+            if image is None:
+                return []
+            img_h, img_w = image.shape[:2]
+        else:
+            img_h, img_w = image_shape[:2]
         detections = []
 
         if not label_path.exists():
@@ -427,20 +469,54 @@ class ImageLoader(QMainWindow):
 
     def load_current_image_data(self):
         """Load detections from verified labels or live model inference."""
+        if not self.filtered_images:
+            return
+
         self.deletion_bounding_box_cords.clear()
         path = self.filtered_images[self.current_index]
+        self.current_image_path = path
+        self.current_base_bgr = None
+        self.current_unverified_bgr = None
 
         if self.training_manager.is_verified_cached(path):
             # Verified images are ground-truth: prefer saved labels over inference.
             self.verified = True
+            self.current_base_bgr = cv2.imread(path)
+            if self.current_base_bgr is None:
+                self.image_label.setText("Unable to load image")
+                self.detections = []
+                self.populate_detections(self.detections, self.active_labels)
+                return
             label_path = self.get_verified_label_path(path)
-            self.detections = self.load_detections_from_label_file(path, label_path)
+            self.detections = self.load_detections_from_label_file(
+                path,
+                label_path,
+                self.current_base_bgr.shape,
+            )
         else:
             # Unverified images show current model predictions as a starting point.
             self.verified = False
-            self.detections = self.labeler.get_detections(path)
+            result = self.labeler.predict(path)
+            if result is None:
+                # Prediction failed or returned nothing
+                self.detections = []
+                self.current_unverified_bgr = None
+            else:
+                self.detections = self.labeler.detections_from_result(result)
+                # Safely call plot() if available; otherwise fall back to None
+                if hasattr(result, "plot") and callable(result.plot):
+                    try:
+                        plotted = result.plot()
+                        if isinstance(plotted, np.ndarray):
+                            self.current_unverified_bgr = plotted
+                        else:
+                            self.current_unverified_bgr = None
+                    except Exception:
+                        self.current_unverified_bgr = None
+                else:
+                    self.current_unverified_bgr = None
         if self.detections:
-            self.populate_detections(self.detections, self.labels)
+            self.populate_detections(self.detections, self.active_labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -458,33 +534,37 @@ class ImageLoader(QMainWindow):
         if index < 0 or index >= len(self.detections):
             return
 
-        if new_label not in self.labels:
-            return
+        combo = self.detection_combos[index]
+        new_id = combo.currentData()
+        if new_id is None:
+            if new_label not in self.labels:
+                return
+            new_id = self.labels.index(new_label)
 
         self.detections[index]['class_name'] = new_label
-        new_id = self.labels.index(new_label)
         self.detections[index]['class_id'] = new_id
 
     def update_display(self, yoloBoxes=None, selection=False):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
-         
-        path = self.filtered_images[self.current_index]
+ 
+        if self.current_base_bgr is None and self.current_unverified_bgr is None:
+            return
+
         if self.current_index < self.image_list.count():
             self.image_list.setCurrentRow(self.current_index)
 
-        if cv2.imread(path) is None:
-            self.image_label.setText("Unable to load image")
-            return
-            
+        # At this point either current_base_bgr or current_unverified_bgr is available,
+        # so there's no need to re-read the image from disk here.
         if self.verified:
-            image = cv2.imread(path)
-            if image is None:
+            if self.current_base_bgr is None:
                 self.image_label.setText("Unable to load image")
                 return
 
-            # Verified images use saved labels, not model inference.
+            image = self.current_base_bgr.copy()
+
+            # Verified images: draw green boxes from saved labels.
             for det in self.detections:
                 x1, y1, x2, y2 = map(int, det["bbox_xyxy"])
                 cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 6)
@@ -501,17 +581,18 @@ class ImageLoader(QMainWindow):
                     3,
                     cv2.LINE_AA,
                 )
-
-            color_correction = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         else:
             # Unverified images should keep YOLO's native plotting behavior.
-            labeled_image = self.labeler.label_image(path)
-            if labeled_image is not None:
-                color_correction = cv2.cvtColor(labeled_image, cv2.COLOR_BGR2RGB)
-            else:
+            if self.current_image_path is None:
                 self.image_label.setText("Unable to load image")
                 return
-        
+            if self.current_unverified_bgr is None:
+                self.image_label.setText("Unable to load image")
+                return
+
+            # Unverified images: keep YOLO's native plot styling.
+            image = self.current_unverified_bgr.copy()
+
         # Draw box around users selected object
         if selection:
             if self.verified:
@@ -519,21 +600,21 @@ class ImageLoader(QMainWindow):
             else:
                 color = (0, 255, 0) # Blue color (BGR format)
             thickness = 4
-            cv2.rectangle(color_correction, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
+            cv2.rectangle(image, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
         if len(self.deletion_bounding_box_cords):
             color = (255, 0, 0) # Red color (BGR format)
             thickness = 5
             for box in self.deletion_bounding_box_cords:
-                cv2.rectangle(color_correction, (box[0], box[1]), (box[2], box[3]), color, thickness)
+                cv2.rectangle(image, (box[0], box[1]), (box[2], box[3]), color, thickness)
 
-            
+        color_correction = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(color_correction)
         pixmap = QPixmap.fromImage(pil_image.toqimage())
         scaled_pixmap = pixmap.scaled(
             1000,
             700,
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
+            Qt.TransformationMode.FastTransformation,
         )
 
         self.image_label.setPixmap(scaled_pixmap)
@@ -612,8 +693,9 @@ class ImageLoader(QMainWindow):
         self.verification_status.setText("Not Verified")
         self.verification_status.setStyleSheet("color: red;")
         self.image_label.setStyleSheet("")
+        self.refresh_filter(keep_current=True) # refresh the current image after we unverify it
   
-    def get_imgs(self,path,new_dir=False):
+    def get_imgs(self,path,new_dir=False,deleted_folder=False):
         if(new_dir):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
@@ -624,7 +706,10 @@ class ImageLoader(QMainWindow):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
                     imgs.append(file_path)
-    
+
+        if deleted_folder:
+            return imgs 
+        
         self.images = imgs
         self.filtered_images = list(imgs)
         if not imgs:
@@ -646,6 +731,7 @@ class ImageLoader(QMainWindow):
             if self.images:
                 self.image_list.setCurrentRow(0)
                 self.filter_dropdown.setCurrentIndex(0)
+                self.load_current_image_data()
                 self.update_display()
             else:
                 self.image_label.setText("No images found")
@@ -666,16 +752,23 @@ class ImageLoader(QMainWindow):
         if self.images:
             editor = LabelEditor(self)
             editor.exec()
+            self.refresh_labels_ui()
 
 
     # -----------------------------
+    def refresh_labels_ui(self):
+        self.load_labels()
+        if self.detections:
+            self.populate_detections(self.detections, self.active_labels)
+        self.update_display()
+
     # Filtering functions
     # -----------------------------
     def on_image_filter_changed(self, index):
+        mode = "all"
+
         # Map dropdown index to filter mode
-        if index == 0:
-            mode = "all"
-        elif index == 1:
+        if index == 1:
             mode = "verified"
         elif index == 2:
             mode = "unverified"
@@ -690,33 +783,52 @@ class ImageLoader(QMainWindow):
 
     def apply_filter(self, mode):
         self.filter_mode = mode
+        self.refresh_filter()
+
+    def refresh_filter(self, keep_current: bool = False):
+        current_path = None
+        if keep_current and self.filtered_images and 0 <= self.current_index < len(self.filtered_images):
+            current_path = self.filtered_images[self.current_index]
+
         self.filtered_images.clear()
-        if mode == "all":
+        self.delete_button.setVisible(True)
+        if self.filter_mode == "all":
             self.filtered_images = list(self.images)
-        elif mode == "verified":
+        elif self.filter_mode == "verified":
             self.filtered_images = [
                 img for img in self.images
                 if self.training_manager.is_verified_cached(img)
             ]
-        elif mode == "unverified":
+        elif self.filter_mode == "unverified":
             self.filtered_images = [
                 img for img in self.images
                 if not self.training_manager.is_verified_cached(img)
             ]
-        elif mode == "model_verified":
+        elif self.filter_mode == "model_verified":
             if self.model_verified:
                 for det in self.model_verified:
                     path = det["image_path"]
                     if not self.training_manager.is_verified_cached(path):
-                        self.filtered_images.append(path)
-                                   
-        elif mode == "model_discarded":
-            self.filtered_images = [
-                img for img in self.model_discarded
-                if not self.training_manager.is_verified_cached(img)
-            ]
+                        self.filtered_images.append(path)                     
+        elif self.filter_mode == "model_discarded":
+            if self.model_discarded:
+                # model_discarded may be None; only iterate if it's truthy
+                self.filtered_images = [
+                    img for img in self.model_discarded
+                    if not self.training_manager.is_verified_cached(img)
+                ]
+            else:
+                self.filtered_images = []
+        elif self.filter_mode == "recently_deleted":
+            root = Path(self.drive).anchor
+            deleted_root = Path(root) / "Recently Deleted"
+            self.filtered_images = self.get_imgs(deleted_root,False,True)
+            self.delete_button.setVisible(False)
 
-        self.current_index = 0
+        if current_path and current_path in self.filtered_images:
+            self.current_index = self.filtered_images.index(current_path)
+        else:
+            self.current_index = 0
 
         self.load_image_list()
 
@@ -725,20 +837,17 @@ class ImageLoader(QMainWindow):
             self.update_display()
         else:
             self.image_label.setText("No images match filter")
+
+    def load_labels(self):
+        self.labels.clear()
+        self.active_labels.clear()
+        labels = self.label_store.read_labels()
+        inactive = set(self.label_store.read_inactive_labels())
+        self.labels.extend(labels)
+        self.active_labels.extend(
+            [label for label in labels if label not in inactive]
+        )
     
-
-    def load_labels(self): #self.labels = self.label_store.read_labels()
-        path = Path.cwd() / "classes.txt"
-        if not path.exists():
-         raise FileNotFoundError(f"{path} not found.")
-
-        try:
-            with open(path, "r") as file:
-                for line in file:
-                    self.labels.append(line.strip())
-        except Exception as e:
-            print(e)
-
     def start_batch_prediction(self):
         from batch_prediction import BatchPrediction
 

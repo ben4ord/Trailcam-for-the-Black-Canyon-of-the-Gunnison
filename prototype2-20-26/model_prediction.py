@@ -1,5 +1,6 @@
 """Prediction helpers wrapping Ultralytics YOLO outputs for the GUI layer."""
 
+from typing import Optional
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
@@ -9,7 +10,7 @@ import cv2
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
-        full_model_path = Path.cwd() /"Models/best_3-24-2026.pt"
+        full_model_path = Path.cwd() /"Models/best_fullRun.pt"
         # Model is loaded once so repeated image predictions are fast.
         self.model = YOLO(full_model_path)
 
@@ -22,7 +23,7 @@ class ImageLabeler:
             return None
 
    
-    def label_image(self, image_path: str) -> np.ndarray:
+    def label_image(self, image_path: str) -> Optional[np.ndarray]:
         """Return image array with YOLO-drawn boxes/labels."""
         prediction = self.predict(image_path)
         if prediction is not None:
@@ -30,13 +31,18 @@ class ImageLabeler:
         else:
             return None
     
-    def get_detections(self, image_path: str) -> list[dict]:
+    def get_detections(self, image_path: str) -> Optional[list[dict]]:
         """Convert raw YOLO boxes into plain dictionaries for UI consumption."""
         img = cv2.imread(image_path)
         if img is None:
             print(f"Skipping invalid image in predict: {image_path}")
             return None  # CRITICAL
+        
         result = self.predict(image_path)
+        return self.detections_from_result(result)
+
+    def detections_from_result(self, result) -> list[dict]:
+        """Convert a YOLO result object into plain dictionaries for UI use."""
         boxes = result.boxes
 
         if boxes is None or len(boxes) == 0:
