@@ -56,8 +56,8 @@ class LabelEditor(QDialog):
         # -----------------------------
 
         # --- Collapsible Section ---
-        self.active_labels = CollapsiblePane("Active Labels")
-        self.inactive_labels = CollapsiblePane("Inactive Labels")
+        self.active_labels: CollapsiblePane = CollapsiblePane("Active Labels")
+        self.inactive_labels: CollapsiblePane = CollapsiblePane("Inactive Labels")
 
         # Create content for the collapsible section
         left_panel = QVBoxLayout()
@@ -68,11 +68,31 @@ class LabelEditor(QDialog):
         self.search_box.setClearButtonEnabled(True)
 
         self.active_labels.set_content_widget(self.active_label_list)
-        self.inactive_labels.set_content_widget(self.inactive_label_list)
+        self.active_labels.set_header_style(
+            background_color="#00FFBB",  # Green header
+            text_color="#000",         # White text for contrast
+            border_color="#00FFBB",      # Darker green border
+            border_width=2,
+            font_size=16,
+            font_weight="bold",
+            hover_color="#00E0A6"        # Lighter green hover
+        )
 
+        self.inactive_labels.set_content_widget(self.inactive_label_list)
+        self.inactive_labels.set_header_style(
+            background_color="#FFBB00",  # Green header
+            text_color="#000",         # White text for contrast
+            border_color="#FFBB00",      # Darker green border
+            border_width=2,
+            font_size=16,
+            font_weight="bold",
+            hover_color="#E0A600"        # Lighter green hover
+        )
+        
         left_panel.addWidget(self.search_box)
         left_panel.addWidget(self.active_labels)
         left_panel.addWidget(self.inactive_labels)
+        left_panel.setContentsMargins(0,0,0,0)
 
         # -----------------------------
         # Right Panel
@@ -181,6 +201,45 @@ class LabelEditor(QDialog):
     # Label Functions
     # -----------------------------
 
+    def update_counts(self):
+        active_count = 0
+        for row in range(self.active_label_list.count()):
+            item = self.active_label_list.item(row)
+            if item and item.text() != "No label file found":
+                active_count += 1
+        self.active_labels.set_item_count(active_count)
+        self.active_labels.set_item_badge_style(
+            bg_color="#ffd6e0",
+            text_color="#e91e63",
+            border_color="#ff80ab",
+            border_radius=12,
+            padding_vertical=4,
+            padding_horizontal=12,
+            font_size=12,
+            font_weight="bold",
+            shadow=True,
+            min_width=40
+        )
+
+        inactive_count = 0
+        for row in range(self.inactive_label_list.count()):
+            item = self.inactive_label_list.item(row)
+            if item and item.text() != "No label file found":
+                inactive_count += 1
+        self.inactive_labels.set_item_count(inactive_count)
+        self.inactive_labels.set_item_badge_style(
+            bg_color="#ffd6e0",
+            text_color="#e91e63",
+            border_color="#ff80ab",
+            border_radius=12,
+            padding_vertical=4,
+            padding_horizontal=12,
+            font_size=12,
+            font_weight="bold",
+            shadow=True,
+            min_width=40
+        )
+
     def load_labels(self):
         active_labels = self.label_store.read_active_labels()
         inactive_labels = self.label_store.read_inactive_labels()
@@ -197,6 +256,7 @@ class LabelEditor(QDialog):
             inactive_sorted_labels = sorted(inactive_labels, key=lambda x: x.lower())
             for label in inactive_sorted_labels:
                 self.inactive_label_list.addItem(QListWidgetItem(label))
+        self.update_counts()
 
     def on_label_clicked(self, item):
         self.selected_label.setText(item.text())
@@ -222,6 +282,7 @@ class LabelEditor(QDialog):
         for row in range(self.inactive_label_list.count()):
             item = self.inactive_label_list.item(row)
             item.setHidden(text not in item.text().lower())
+        self.update_counts()
 
     def show_input(self):
         self.new_label_input.clear()
@@ -236,13 +297,14 @@ class LabelEditor(QDialog):
             self.inactive_label_list.clear()
             self.load_labels()
             self.selected_label.setText(label)
-            matches = self.active_label_list.findItems(label, Qt.MatchExactly)
+            matches = self.active_label_list.findItems(label, Qt.MatchExactly) #type: ignore
             if matches:
                 self.active_label_list.setCurrentItem(matches[0])
             self.delete_button.setEnabled(True)
             self.edit_button.setEnabled(True)
             self.add_button.setIcon(qta.icon('fa6s.plus'))
             self.add_button.setToolTip('Add Label')
+            self.update_counts()
             return
         self.show_input()
 
