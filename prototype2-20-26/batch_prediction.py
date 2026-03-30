@@ -7,7 +7,7 @@ from model_prediction import ImageLabeler
 import cv2
 
 class BatchPrediction(QMainWindow):
-    def __init__(self,drive,in_image_viewer=False):
+    def __init__(self,drive,confidence_value,in_image_viewer=False):
         super().__init__()
         self.drive = drive
         self.images = []
@@ -60,7 +60,8 @@ class BatchPrediction(QMainWindow):
 
         # Images with classification under model_threshold
         # will be put in the model_discarded
-        self.model_threshold = 0.0 # Allow users to change
+
+        self.model_threshold = confidence_value # Allow users to change
         self.model_discarded = []
         self.model_verified = []
         #load window first then start processing 
