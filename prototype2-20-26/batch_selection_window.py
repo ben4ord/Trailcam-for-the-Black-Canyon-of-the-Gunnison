@@ -74,7 +74,7 @@ class BatchWindow(QMainWindow):
         self.close()
 
     def start_batch_prediction(self):
-        self.predictionWindow = BatchPrediction(self.drive,True)
+        self.predictionWindow = BatchPrediction(self.drive,confidence_value=self.confidence_value)
         self.predictionWindow.show()
         self.close()
     
