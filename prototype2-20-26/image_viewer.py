@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QInputDialog
+    QInputDialog,
+    QGroupBox
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
@@ -55,12 +56,8 @@ class ImageLoader(QMainWindow):
         self.model_discarded = model_discarded
         if model_verified:
             self.model_verified = model_verified
-            #print("Model Verified Images")
-            #print(self.model_verified)
         if model_discarded:
             self.model_discarded = model_discarded
-            #print("Model Discared Images")
-            #print(self.model_discarded)
         self.current_base_bgr: np.ndarray | None = None
         self.current_unverified_bgr: np.ndarray | None = None
         self.current_image_path = None
@@ -71,6 +68,10 @@ class ImageLoader(QMainWindow):
         self.current_index = 0
         self.filter_mode = "all"
         self.verified = False
+        self.total_verified_count = 0
+        self.total_removed_count = 0
+        self.newly_verified_count = 0
+        self.recently_deleted_count = 0
 
         # -----------------------------
         # Model / backend logic
@@ -161,6 +162,38 @@ class ImageLoader(QMainWindow):
 
         self.detection_label = QLabel("Detections:") 
 
+        # -----------------------------
+        # Verification Box (Below Label box)
+        # -----------------------------
+        self.verification_summary_box = QGroupBox("Verification Summary")
+        summary_layout = QGridLayout()
+        summary_label_total_verified = QLabel("Total verified images:")
+        summary_label_newly_verified = QLabel("Newly verified images:")
+        summary_label_total_removed = QLabel("Total removed images:")
+        summary_label_recently_removed = QLabel("Recently removed images:")
+        self.summary_total_verified_value = QLabel("120")
+        self.summary_newly_verified_value = QLabel("8")
+        self.summary_total_removed_value = QLabel("35")
+        self.summary_recently_removed_value = QLabel("3")
+        self.summary_total_verified_value.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.summary_newly_verified_value.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.summary_total_removed_value.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.summary_recently_removed_value.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.summary_total_verified_value.setStyleSheet("font-weight: bold;")
+        self.summary_newly_verified_value.setStyleSheet("color: green; font-weight: bold;")
+        self.summary_total_removed_value.setStyleSheet("font-weight: bold;")
+        self.summary_recently_removed_value.setStyleSheet("color: red; font-weight: bold;")
+
+        summary_layout.addWidget(summary_label_total_verified, 0, 0)
+        summary_layout.addWidget(self.summary_total_verified_value, 0, 1)
+        summary_layout.addWidget(summary_label_newly_verified, 1, 0)
+        summary_layout.addWidget(self.summary_newly_verified_value, 1, 1)
+        summary_layout.addWidget(summary_label_total_removed, 2, 0)
+        summary_layout.addWidget(self.summary_total_removed_value, 2, 1)
+        summary_layout.addWidget(summary_label_recently_removed, 3, 0)
+        summary_layout.addWidget(self.summary_recently_removed_value, 3, 1)
+        self.verification_summary_box.setLayout(summary_layout)
+
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search images...")
         self.search_box.setClearButtonEnabled(True)
@@ -193,38 +226,42 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Nav Bar
         # -----------------------------
-        layout.addWidget(self.nav_bar, 0, 0, 1, 7)
+        layout.addWidget(self.nav_bar, 0, 0, 1, 8)
         # -----------------------------
         # Top Controls Row
         # -----------------------------
-        layout.addWidget(self.filter_dropdown, 1, 0, 1, 2)
-        layout.addWidget(self.confirm_toggle, 1, 2)
-        layout.addWidget(self.search_box, 1, 5)
+        layout.addWidget(self.filter_dropdown, 1, 0, 1, 3)
+        layout.addWidget(self.confirm_toggle, 1, 3)
+        layout.addWidget(self.search_box, 1, 6)
         # -----------------------------
         # Main Content Area
         # -----------------------------
         # Detection label
         layout.addWidget(self.detection_label, 2, 0)
         # Image in center
-        layout.addWidget(self.image_label, 2, 1, 2, 3)
+        layout.addWidget(self.image_label, 2, 3, 2, 3)
         # Image list on right
-        layout.addWidget(self.image_list, 2, 5, 3, 2)
+        layout.addWidget(self.image_list, 2, 6, 3, 2)
         # -----------------------------
         # Detection Scroll Area
         # -----------------------------
-        layout.addWidget(self.detection_editor, 3, 0)
+        layout.addWidget(self.detection_editor, 3, 0, 1, 3)
+        # -----------------------------
+        # Verification Summary Box
+        # -----------------------------
+        layout.addWidget(self.verification_summary_box, 4, 0, 1, 2)
         # -----------------------------
         # Verification Controls (moved down one row)
         # -----------------------------
-        layout.addWidget(self.delete_button, 4, 1)
-        layout.addWidget(self.verification_status, 4, 2)
-        layout.addWidget(self.verify_image, 4, 3)
-        layout.addWidget(self.unverify_image_btn, 4, 4)
+        layout.addWidget(self.delete_button, 5, 1)
+        layout.addWidget(self.verification_status, 5, 2)
+        layout.addWidget(self.verify_image, 5, 3)
+        layout.addWidget(self.unverify_image_btn, 5, 4)
         # -----------------------------
         # Navigation Row
         # -----------------------------
-        layout.addWidget(self.previousImage, 5, 0)
-        layout.addWidget(self.nextImage, 5, 4)
+        layout.addWidget(self.previousImage, 6, 0)
+        layout.addWidget(self.nextImage, 6, 4)
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
@@ -233,7 +270,10 @@ class ImageLoader(QMainWindow):
         # Final dataset initialization after widgets exist
         self.apply_filter("all")
 
+        self.total_verified_count = self.count_images_in_dir(self.training_manager.images_dir)
+        self.total_removed_count = self.count_images_in_dir(self.recently_deleted_root())
         self.load_image_list()
+        self.update_verification_summary()
 
         if self.filtered_images:
             self.image_list.setCurrentRow(self.current_index)
@@ -286,6 +326,9 @@ class ImageLoader(QMainWindow):
 
         if Path(file_path).is_file():
             self.move_to_recently_deleted(file_path)
+            self.total_removed_count += 1
+            self.recently_deleted_count += 1
+            self.update_verification_summary()
             
         self.get_imgs(self.drive, True)
         self.image_list.takeItem(self.current_index)
@@ -319,6 +362,26 @@ class ImageLoader(QMainWindow):
         # Move the file
         shutil.move(str(original_path), str(destination))
         print(f"Moved to: {destination}")
+
+    def count_images_in_dir(self, root: Path) -> int:
+        if not root.exists():
+            return 0
+        image_exts = ('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')
+        return sum(
+            1
+            for p in root.rglob("*")
+            if p.is_file() and p.suffix.lower() in image_exts
+        )
+
+    def recently_deleted_root(self) -> Path:
+        root = Path(self.drive).anchor
+        return Path(root) / "Recently Deleted"
+
+    def update_verification_summary(self):
+        self.summary_total_verified_value.setText(str(self.total_verified_count))
+        self.summary_total_removed_value.setText(str(self.total_removed_count))
+        self.summary_newly_verified_value.setText(str(self.newly_verified_count))
+        self.summary_recently_removed_value.setText(str(self.recently_deleted_count))
 
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
@@ -653,6 +716,9 @@ class ImageLoader(QMainWindow):
         # Convert edited detections to YOLO txt lines before writing to dataset.
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
+        self.total_verified_count += 1
+        self.newly_verified_count += 1
+        self.update_verification_summary()
 
         show_info(
             self,
@@ -683,6 +749,9 @@ class ImageLoader(QMainWindow):
 
         # Delete verified training dataset copy + label file
         self.training_manager.unverify_image(source)
+        self.total_verified_count = max(0, self.total_verified_count - 1)
+        self.newly_verified_count = max(0, self.newly_verified_count - 1)
+        self.update_verification_summary()
 
         show_info(
             self,
