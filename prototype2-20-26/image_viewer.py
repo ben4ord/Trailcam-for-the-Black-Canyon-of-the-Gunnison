@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QInputDialog
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
@@ -851,8 +852,20 @@ class ImageLoader(QMainWindow):
     
     def start_batch_prediction(self):
         from batch_prediction import BatchPrediction
+        confidence_value, ok = QInputDialog.getInt(
+            self,
+            "Set Confidence Threshold",
+            "Enter confidence value (0–100):",
+            0,      # default value
+            0,
+            100,
+            1
+             )
 
-        self.predictionWindow = BatchPrediction(self.drive)
+        if not ok:
+            return  # user cancelled
+
+        self.predictionWindow = BatchPrediction(self.drive,confidence_value)
         self.predictionWindow.show()
         self.close()
     
