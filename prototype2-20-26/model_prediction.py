@@ -10,7 +10,7 @@ import cv2
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
-        full_model_path = Path.cwd() /"Models/best_3-24-2026.pt"
+        full_model_path = Path.cwd() /"Models/best_fullRun.pt"
         # Model is loaded once so repeated image predictions are fast.
         self.model = YOLO(full_model_path)
 
