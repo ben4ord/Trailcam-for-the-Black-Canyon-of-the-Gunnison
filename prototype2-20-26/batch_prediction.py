@@ -4,7 +4,6 @@ import os
 from nav_bar import NavBar
 from window_utils import center_on_primary_screen
 from model_prediction import ImageLabeler
-import cv2
 
 class BatchPrediction(QMainWindow):
     def __init__(self,drive,confidence_value,in_image_viewer=False):
