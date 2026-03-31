@@ -61,10 +61,8 @@ class ImageLoader(QMainWindow):
         self.original_width = None
         if model_verified:
             self.model_verified = model_verified
-            
         if model_discarded:
             self.model_discarded = model_discarded
-            
         self.current_base_bgr: np.ndarray | None = None
         self.current_unverified_bgr: np.ndarray | None = None
         self.current_image_path = None
@@ -629,7 +627,7 @@ class ImageLoader(QMainWindow):
         self.detections[index]['class_id'] = new_id
         self.last_changed_label = new_label
 
-    def _get_current_or_last_label(self):
+    def get_current_or_last_label(self):
         row = self.detection_editor.currentRow()
         if 0 <= row < len(self.detections):
             return self.detections[row]["class_name"]
