@@ -20,11 +20,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt,Signal,QObject
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
 from verified_images_manager import TrainingManager
+from clickable_label import ClickableLabel
 from label_editor import LabelEditor
 from label_store import LabelStore
 from ui_dialogs import confirm_action, show_info, show_no_images_popup
@@ -53,14 +54,16 @@ class ImageLoader(QMainWindow):
         self.label_store = LabelStore()
         self.model_verified = model_verified
         self.model_discarded = model_discarded
+        self.creation_boxes = []
+        self._temp_point = None
+        self.original_height = None
+        self.original_width = None
         if model_verified:
             self.model_verified = model_verified
-            #print("Model Verified Images")
-            #print(self.model_verified)
+            
         if model_discarded:
             self.model_discarded = model_discarded
-            #print("Model Discared Images")
-            #print(self.model_discarded)
+            
         self.current_base_bgr: np.ndarray | None = None
         self.current_unverified_bgr: np.ndarray | None = None
         self.current_image_path = None
@@ -155,6 +158,8 @@ class ImageLoader(QMainWindow):
         # Image display
         # -----------------------------
         self.image_label = QLabel("No images found")
+        self.image_label = ClickableLabel()
+        self.image_label.clicked.connect(self.on_image_clicked)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.image_list = QListWidget()
@@ -318,8 +323,7 @@ class ImageLoader(QMainWindow):
         destination.parent.mkdir(parents=True, exist_ok=True)
         # Move the file
         shutil.move(str(original_path), str(destination))
-        print(f"Moved to: {destination}")
-
+       
     def on_list_item_clicked(self, item):
         self.current_index = self.image_list.row(item)
         self.load_current_image_data()
@@ -331,6 +335,7 @@ class ImageLoader(QMainWindow):
 
         self.current_index = (self.current_index + 1) % len(self.filtered_images)
         self.load_current_image_data()
+        self.creation_boxes.clear()
         self.update_display()
 
     def previous_image(self):
@@ -339,6 +344,7 @@ class ImageLoader(QMainWindow):
 
         self.current_index = (self.current_index - 1) % len(self.filtered_images)
         self.load_current_image_data()
+        self.creation_boxes.clear()
         self.update_display()
 
     
@@ -413,7 +419,7 @@ class ImageLoader(QMainWindow):
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
         # Redraw bounding box
-        self.update_display()
+        self.update_display(creation=True,creationBoxes=self.creation_boxes)
 
     def get_verified_label_path(self, source_path):
         """Map source image path to its verified dataset label txt file."""
@@ -546,7 +552,7 @@ class ImageLoader(QMainWindow):
         self.detections[index]['class_name'] = new_label
         self.detections[index]['class_id'] = new_id
 
-    def update_display(self, yoloBoxes=None, selection=False):
+    def update_display(self, yoloBoxes=None, selection=False,creation=False,creationBoxes=None):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
@@ -594,7 +600,7 @@ class ImageLoader(QMainWindow):
 
             # Unverified images: keep YOLO's native plot styling.
             image = self.current_unverified_bgr.copy()
-
+            self.original_height, self.original_width = image.shape[:2]
         # Draw box around users selected object
         if selection:
             if self.verified:
@@ -603,8 +609,18 @@ class ImageLoader(QMainWindow):
                 color = (0, 255, 0) # Blue color (BGR format)
             thickness = 4
             cv2.rectangle(image, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
+
+        if creation:
+            color = (0, 255, 0) # Blue color (BGR format)
+            thickness = 5
+            for box in creationBoxes:
+                x1, y1, x2, y2 = box
+                cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+            self.refresh_labels_ui()
+
+
         if len(self.deletion_bounding_box_cords):
-            color = (255, 0, 0) # Red color (BGR format)
+            color = (0, 0, 255) # Red color (BGR format)
             thickness = 5
             for box in self.deletion_bounding_box_cords:
                 cv2.rectangle(image, (box[0], box[1]), (box[2], box[3]), color, thickness)
@@ -618,9 +634,10 @@ class ImageLoader(QMainWindow):
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.FastTransformation,
         )
-
+        self.display_width = scaled_pixmap.width()
+        self.display_height = scaled_pixmap.height()
         self.image_label.setPixmap(scaled_pixmap)
-
+      
         if self.verified:
             self.verification_status.setText("Verified")
             self.verification_status.setStyleSheet("color: green; font-weight: bold;")
@@ -869,3 +886,84 @@ class ImageLoader(QMainWindow):
         self.predictionWindow.show()
         self.close()
     
+    def on_image_clicked(self, x, y):
+        img_x, img_y = self.map_to_image_coordinates(x, y)
+
+        if img_x is None:
+            return  # Click was outside image
+
+        if self._temp_point is None:
+            self._temp_point = (img_x, img_y)
+        else:
+            x1, y1 = self._temp_point
+            x2, y2 = img_x, img_y
+
+            x_min = min(x1, x2)
+            y_min = min(y1, y2)
+            x_max = max(x1, x2)
+            y_max = max(y1, y2)
+
+            # Covert to YOLO normalized
+            img_w = self.original_width
+            img_h = self.original_height
+            box_w = x_max - x_min
+            box_h = y_max - y_min
+
+            x_center = x_min + box_w / 2
+            y_center = y_min + box_h / 2
+
+            x_center_n = x_center / img_w
+            y_center_n = y_center / img_h
+            box_w_n = box_w / img_w
+            box_h_n = box_h / img_h
+
+            self.detections.append({
+                "class_id": 0,
+                "class_name": "None",
+                "confidence": 1.0,
+                "bbox_xyxy": [x_min, y_min, x_max, y_max],
+                "bbox_xywhn": [x_center_n, y_center_n, box_w_n, box_h_n],
+            })
+            self.creation_boxes.append([x_min, y_min, x_max, y_max])
+            self._temp_point = None
+
+            self.update_display(creation=True, creationBoxes=self.creation_boxes)
+
+    def map_to_image_coordinates(self, click_x, click_y):
+        """
+        Converts QLabel click coordinates to original image coordinates.
+        Handles KeepAspectRatio scaling + centering.
+        """
+
+        if not hasattr(self, "original_width"):
+            return None, None
+
+        label_width = self.image_label.width()
+        label_height = self.image_label.height()
+
+        # Calculate offsets (letterboxing)
+        x_offset = (label_width - self.display_width) / 2
+        y_offset = (label_height - self.display_height) / 2
+
+        # Check if click is inside actual image area
+        if (
+            click_x < x_offset
+            or click_x > x_offset + self.display_width
+            or click_y < y_offset
+            or click_y > y_offset + self.display_height
+        ):
+            return None, None  # Clicked padding area
+
+        # Remove offset
+        adjusted_x = click_x - x_offset
+        adjusted_y = click_y - y_offset
+
+        # Compute scaling factor
+        scale_x = self.original_width / self.display_width
+        scale_y = self.original_height / self.display_height
+
+        # Map back to original image coordinates
+        image_x = int(adjusted_x * scale_x)
+        image_y = int(adjusted_y * scale_y)
+
+        return image_x, image_y
