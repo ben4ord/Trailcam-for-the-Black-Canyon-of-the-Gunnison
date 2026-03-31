@@ -72,6 +72,8 @@ class ImageLoader(QMainWindow):
         self.total_removed_count = 0
         self.newly_verified_count = 0
         self.recently_deleted_count = 0
+        self.last_verified_label = None
+        self.last_changed_label = None
 
         # -----------------------------
         # Model / backend logic
@@ -216,6 +218,7 @@ class ImageLoader(QMainWindow):
         QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
         QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
         QShortcut(Qt.Key_Backspace, self, self.delete_image) # type: ignore
+        QShortcut(Qt.Key_L, self, self.apply_last_verified_label) # type: ignore
 
         # -----------------------------
         # Layout placement
@@ -414,6 +417,11 @@ class ImageLoader(QMainWindow):
             [(name, label_id_map[name]) for name in class_list if name in label_id_map],
             key=lambda item: item[0].lower(),
         )
+        if self.last_verified_label and self.last_verified_label in label_id_map:
+            sorted_options = [
+                item for item in sorted_options if item[0] != self.last_verified_label
+            ]
+            sorted_options.insert(0, (self.last_verified_label, label_id_map[self.last_verified_label]))
 
         for i, det in enumerate(detections):
             
@@ -608,6 +616,35 @@ class ImageLoader(QMainWindow):
 
         self.detections[index]['class_name'] = new_label
         self.detections[index]['class_id'] = new_id
+        self.last_changed_label = new_label
+
+    def _get_current_or_last_label(self):
+        row = self.detection_editor.currentRow()
+        if 0 <= row < len(self.detections):
+            return self.detections[row]["class_name"]
+        if self.last_changed_label:
+            return self.last_changed_label
+        if len(self.detections) == 1:
+            return self.detections[0]["class_name"]
+        return None
+
+    def apply_last_verified_label(self):
+        if not self.last_verified_label:
+            return
+        if not self.detections:
+            return
+        row = self.detection_editor.currentRow()
+        if row < 0 and len(self.detections) == 1:
+            row = 0
+        if row < 0 or row >= len(self.detections):
+            return
+        combo = self.detection_combos[row]
+        target_index = combo.findText(self.last_verified_label)
+        if target_index >= 0:
+            combo.setCurrentIndex(target_index)
+        else:
+            combo.insertItem(0, self.last_verified_label)
+            combo.setCurrentIndex(0)
 
     def update_display(self, yoloBoxes=None, selection=False):
         # Centralized logic to refresh the image label
@@ -716,6 +753,9 @@ class ImageLoader(QMainWindow):
         # Convert edited detections to YOLO txt lines before writing to dataset.
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
+        last_label = self._get_current_or_last_label()
+        if last_label:
+            self.last_verified_label = last_label
         self.total_verified_count += 1
         self.newly_verified_count += 1
         self.update_verification_summary()
