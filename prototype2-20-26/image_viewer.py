@@ -3,7 +3,6 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
-from numpy.typing import NDArray
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -21,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
-from PySide6.QtCore import Qt,Signal,QObject
+from PySide6.QtCore import Qt
 import qtawesome as qta
 from model_prediction import ImageLabeler
 from nav_bar import NavBar
@@ -716,7 +715,7 @@ class ImageLoader(QMainWindow):
         if creation:
             color = (0, 255, 0) # Blue color (BGR format)
             thickness = 5
-            for box in creationBoxes:
+            for box in creationBoxes: #type: ignore
                 x1, y1, x2, y2 = box
                 cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
             self.refresh_labels_ui()
@@ -773,7 +772,7 @@ class ImageLoader(QMainWindow):
         # Convert edited detections to YOLO txt lines before writing to dataset.
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
-        last_label = self._get_current_or_last_label()
+        last_label = self.get_current_or_last_label()
         if last_label:
             self.last_verified_label = last_label
         self.total_verified_count += 1
@@ -1011,9 +1010,9 @@ class ImageLoader(QMainWindow):
             x2, y2 = img_x, img_y
 
             x_min = min(x1, x2)
-            y_min = min(y1, y2)
+            y_min = min(y1, y2) #type: ignore
             x_max = max(x1, x2)
-            y_max = max(y1, y2)
+            y_max = max(y1, y2) #type: ignore
 
             # Covert to YOLO normalized
             img_w = self.original_width
@@ -1024,9 +1023,9 @@ class ImageLoader(QMainWindow):
             x_center = x_min + box_w / 2
             y_center = y_min + box_h / 2
 
-            x_center_n = x_center / img_w
+            x_center_n = x_center / img_w #type: ignore
             y_center_n = y_center / img_h
-            box_w_n = box_w / img_w
+            box_w_n = box_w / img_w #type: ignore
             box_h_n = box_h / img_h
 
             self.detections.append({
@@ -1071,8 +1070,8 @@ class ImageLoader(QMainWindow):
         adjusted_y = click_y - y_offset
 
         # Compute scaling factor
-        scale_x = self.original_width / self.display_width
-        scale_y = self.original_height / self.display_height
+        scale_x = self.original_width / self.display_width #type: ignore
+        scale_y = self.original_height / self.display_height #type: ignore
 
         # Map back to original image coordinates
         image_x = int(adjusted_x * scale_x)

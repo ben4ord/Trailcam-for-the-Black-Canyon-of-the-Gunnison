@@ -4,7 +4,6 @@ from typing import Optional
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
-import math
 import cv2
 
 class ImageLabeler:
