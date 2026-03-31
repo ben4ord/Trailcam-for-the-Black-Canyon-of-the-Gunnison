@@ -618,7 +618,7 @@ class ImageLoader(QMainWindow):
         self.detections[index]['class_id'] = new_id
         self.last_changed_label = new_label
 
-    def _get_current_or_last_label(self):
+    def get_current_or_last_label(self):
         row = self.detection_editor.currentRow()
         if 0 <= row < len(self.detections):
             return self.detections[row]["class_name"]
