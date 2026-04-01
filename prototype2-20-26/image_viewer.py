@@ -773,7 +773,7 @@ class ImageLoader(QMainWindow):
         # Convert edited detections to YOLO txt lines before writing to dataset.
         label_lines = self.labeler.to_yolo_label_lines(self.detections)
         new_path, label_path = self.training_manager.verify_image(source, label_lines)
-        last_label = self._get_current_or_last_label()
+        last_label = self.get_current_or_last_label()
         if last_label:
             self.last_verified_label = last_label
         self.total_verified_count += 1
