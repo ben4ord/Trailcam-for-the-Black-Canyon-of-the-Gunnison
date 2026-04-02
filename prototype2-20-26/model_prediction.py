@@ -7,7 +7,7 @@ import numpy as np
 class ImageLabeler:
     def __init__(self):
         # Resolve full model path
-        full_model_path = Path.cwd() /"Models/best_3-3-2026.pt"
+        full_model_path = Path.cwd() /"Models/best_3-24-2026.pt"
         # Model is loaded once so repeated image predictions are fast.
         self.model = YOLO(full_model_path)
 

@@ -114,12 +114,17 @@ class TrainModel(QMainWindow):
 
         self.populate_model_dropdown()
 
+        # Resume Button
+        self.resume_btn = QPushButton("Resume Last Training")
+        self.resume_btn.clicked.connect(self.resume_training)
+
         # Stop Button
         self.stop_btn = QPushButton("Abort Training")
         self.stop_btn.clicked.connect(self.abort_training)
         self.stop_btn.setEnabled(False)
 
         layout.addWidget(self.train_btn)
+        layout.addWidget(self.resume_btn)
         layout.addWidget(self.stop_btn)
 
         self.refresh_timer = QTimer(self)
@@ -171,6 +176,7 @@ class TrainModel(QMainWindow):
             self.train_btn.setText("Train New Model")
         else:
             self.train_btn.setText(f"Train Using '{selected_txt}'")
+            self.resume_btn.setText(f"Resume Using '{selected_txt}'")
 
     # Get the user device (this is for GPU usage when training, should work on Mac as well)
     def get_device(self):
@@ -181,6 +187,27 @@ class TrainModel(QMainWindow):
             return "mps"        # Apple Silicon Mac
         else:
             return "cpu"        # Fallback
+
+    def get_corresponding_last_pt(self, model_path: str) -> str:
+        """Get the corresponding last.pt from the same directory as the selected model."""
+        if not model_path:
+            return "yolov8s.pt"
+        
+        # Get the directory containing the model
+        model_dir = os.path.dirname(model_path)
+        
+        # Construct path to last.pt in the same directory
+        last_pt_path = os.path.join(model_dir, "last.pt")
+        
+        # Verify it exists relative to Models folder
+        models_dir = os.path.join(os.path.dirname(__file__), "Models")
+        full_last_pt_path = os.path.join(models_dir, last_pt_path)
+        
+        if os.path.isfile(full_last_pt_path):
+            return last_pt_path
+        
+        # If last.pt doesn't exist, return the original model path
+        return model_path
 
     def get_next_available_run_name(self, project: str, base_name: str) -> str:
         """Find the next available run folder name by incrementing if needed."""
@@ -207,6 +234,35 @@ class TrainModel(QMainWindow):
             counter += 1
         
         return f"{name_part}{counter}"
+    
+    def resume_training(self):
+        """Resume the last training run based on selection"""
+        selected_model = self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt"
+        last_model = self.get_corresponding_last_pt(selected_model)
+
+        
+        if not confirm_action(
+            self,
+            "Resume Training",
+            f"Are you sure you want to resume training {last_model}?",
+        ):
+            return
+        
+        config = TrainingConfig(model=last_model, device=self.get_device())
+        config.resume = True
+        # Extract run name from model path (e.g., "experiment8/weights/last.pt" -> "experiment8")
+        run_name = os.path.dirname(os.path.dirname(last_model)) or "experiment1"
+        config.name = os.path.basename(run_name)
+        ok, message = self.session.start(self.drive, config)
+        if not ok:
+            QMessageBox.information(self, "Training Busy", message)
+            return
+
+        self.set_busy_progress()
+        self.progress_label.setText("Launching training...")
+        self.debug_label.setText("Debug: waiting for first completed epoch...")
+        self.refresh_session_ui()
+
 
     # This is to start training on a completely new model (no previous weights)
     # This calls the session.start which launches a function in traning_session.py

@@ -29,3 +29,5 @@ class TrainingConfig:
     project: str = "Models"
     # Preferred run folder base name (auto-incremented if it exists).
     name: str = "experiment1"
+    # Resume field to continue training from a previous run
+    resume: bool | None = None
