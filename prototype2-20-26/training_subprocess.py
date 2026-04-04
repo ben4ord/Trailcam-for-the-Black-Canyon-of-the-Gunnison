@@ -363,37 +363,6 @@ def _checkpoint_is_resumable(path: str):
         emit("debug", text=f"Debug: failed to inspect checkpoint for resume at {path}: {exc}")
         return False, None
 
-
-# This grabs the next folder for storing information from the training run
-def next_experiment_name(project_path: Path, requested_name: str) -> str:
-    """Generate non-colliding run names (experiment1, experiment2, ...)."""
-    name = (requested_name or "").strip() or "experiment1"
-    project_path.mkdir(parents=True, exist_ok=True)
-
-    requested_path = project_path / name
-    if not requested_path.exists():
-        return name
-
-    match = re.fullmatch(r"^(.*?)(\d+)$", name)
-    if match:
-        prefix = match.group(1)
-        start_index = int(match.group(2))
-    else:
-        prefix = name
-        start_index = 1
-
-    max_index = start_index
-    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-    for child in project_path.iterdir():
-        if not child.is_dir():
-            continue
-        folder_match = pattern.fullmatch(child.name)
-        if folder_match:
-            max_index = max(max_index, int(folder_match.group(1)))
-
-    return f"{prefix}{max_index + 1}"
-
-
 class StreamParser:
     def __init__(self, epochs: int):
         # Ultralytics writes carriage-return style progress; normalize to lines.
@@ -645,11 +614,7 @@ def main() -> int:
         if not project_path.is_absolute():
             project_path = (base_dir / project_path).resolve()
 
-        # When resuming, use the existing run name; otherwise generate a new one.
-        if config.resume:
-            run_name = config.name
-        else:
-            run_name = next_experiment_name(project_path, config.name)
+        run_name = config.name
         run_dir = (project_path / run_name).resolve()
         emit("run_dir", path=str(run_dir))
 

@@ -21,6 +21,7 @@ import qtawesome as qta
 from training_config import TrainingConfig
 from training_session import get_training_session
 from ui_dialogs import confirm_action
+import datetime
 
 
 class TrainModel(QMainWindow):
@@ -153,7 +154,6 @@ class TrainModel(QMainWindow):
         self.model_combo.clear()
         self.model_combo.addItem("Train from scratch", userData=None)
 
-        #TODO: could possibly pull this file io into a seperate function to also use with resuming training
         models_dir = os.path.join(os.path.dirname(__file__), "Models")
         if os.path.isdir(models_dir):
             for (root, dirs, files) in os.walk(models_dir):
@@ -161,9 +161,8 @@ class TrainModel(QMainWindow):
                     if f.endswith(".pt"):
                         full_path = os.path.join(root,f)
                         relative_path = os.path.relpath(full_path, start=models_dir)
-                        # Keep file name in userData; training config resolves path later.
                         if f != "last.pt": #ignore last.pt file
-                            self.model_combo.addItem(relative_path, userData=relative_path) #TODO: confirm that we want to dipsplay relative path, can also display just f for name of model
+                            self.model_combo.addItem(relative_path, userData=relative_path)
         self.model_combo.blockSignals(False)
         self.on_model_selected(self.model_combo.currentIndex())
 
@@ -171,12 +170,15 @@ class TrainModel(QMainWindow):
     def on_model_selected(self, index):
         """Update primary action text to reflect selected base model."""
         selected_txt = self.model_combo.currentText()
+
+        selected_model = self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt"
+        last_model = self.get_corresponding_last_pt(selected_model)
         
         if index == 0:
             self.train_btn.setText("Train New Model")
         else:
             self.train_btn.setText(f"Train Using '{selected_txt}'")
-            self.resume_btn.setText(f"Resume Using '{selected_txt}'")
+            self.resume_btn.setText(f"Resume Using '{last_model}'")
 
     # Get the user device (this is for GPU usage when training, should work on Mac as well)
     def get_device(self):
@@ -208,32 +210,6 @@ class TrainModel(QMainWindow):
         
         # If last.pt doesn't exist, return the original model path
         return model_path
-
-    def get_next_available_run_name(self, project: str, base_name: str) -> str:
-        """Find the next available run folder name by incrementing if needed."""
-        project_path = os.path.join(os.path.dirname(__file__), project)
-        
-        # If project folder doesn't exist yet, use the base name as-is
-        if not os.path.isdir(project_path):
-            return base_name
-        
-        # Use regex to seperate base name and number part 
-        # (.+?): Group 1 non numeric prefix, (\d*): Group 2 numeric suffix
-        match = re.match(r'(.+?)(\d*)$', base_name)
-        if match:
-            name_part = match.group(1)
-            num_part = match.group(2)
-            start_num = int(num_part) if num_part else 1
-        else:
-            name_part = base_name
-            start_num = 1
-        
-        # Find the next available number
-        counter = start_num
-        while os.path.isdir(os.path.join(project_path, f"{name_part}{counter}")):
-            counter += 1
-        
-        return f"{name_part}{counter}"
     
     def resume_training(self):
         """Resume the last training run based on selection"""
@@ -250,8 +226,7 @@ class TrainModel(QMainWindow):
         
         config = TrainingConfig(model=last_model, device=self.get_device())
         config.resume = True
-        # Extract run name from model path (e.g., "experiment8/weights/last.pt" -> "experiment8")
-        run_name = os.path.dirname(os.path.dirname(last_model)) or "experiment1"
+        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
         config.name = os.path.basename(run_name)
         ok, message = self.session.start(self.drive, config)
         if not ok:
@@ -276,7 +251,7 @@ class TrainModel(QMainWindow):
             return
 
         config = TrainingConfig(model=self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt", device=self.get_device())
-        config.name = self.get_next_available_run_name(config.project, config.name)
+        config.name= datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
         ok, message = self.session.start(self.drive, config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)

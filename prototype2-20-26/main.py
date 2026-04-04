@@ -76,8 +76,7 @@ class MainWindow(QMainWindow):
     from pathlib import Path
 
     def ensure_delete_folder(self):
-        root = Path(self.dir_name_edit.text()).anchor
-        target_path = Path(root) / "Recently Deleted"
+        target_path = Path.home() / "Recently Deleted"
 
         if not target_path.exists():
             target_path.mkdir()
