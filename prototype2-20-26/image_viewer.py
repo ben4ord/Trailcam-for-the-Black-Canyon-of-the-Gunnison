@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QGroupBox
 )
-from PySide6.QtWidgets import QHBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
 from PySide6.QtCore import Qt
 import qtawesome as qta
@@ -54,6 +54,8 @@ class ImageLoader(QMainWindow):
         self.label_store = LabelStore()
         self.model_verified = model_verified
         self.model_discarded = model_discarded
+        self.species_filter: set = set()
+        self.species_cache: dict = {}
         self.creation_boxes = []
         self._temp_point = None
         self.original_height = None
@@ -157,6 +159,21 @@ class ImageLoader(QMainWindow):
             self.on_image_filter_changed
         )
 
+        # Species filter panel — grid of toggle buttons, one per label
+        self.species_filter_group = QGroupBox("Filter by Species")
+        species_vbox = QVBoxLayout()
+        species_vbox.setContentsMargins(4, 4, 4, 4)
+        species_vbox.setSpacing(4)
+        self._species_buttons: list = []
+        self._species_btn_widget = QWidget()
+        self._species_grid = QGridLayout(self._species_btn_widget)
+        self._species_grid.setContentsMargins(0, 0, 0, 0)
+        self._species_grid.setSpacing(3)
+        self.clear_species_btn = QPushButton("Clear All")
+        self.clear_species_btn.clicked.connect(self.clear_species_filter)
+        species_vbox.addWidget(self._species_btn_widget)
+        species_vbox.addWidget(self.clear_species_btn)
+        self.species_filter_group.setLayout(species_vbox)
 
         # -----------------------------
         # Image display
@@ -231,7 +248,7 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Make image area expand
         layout.setColumnStretch(3, 1)
-        layout.setRowStretch(3, 1)   # detection scroll expands
+        layout.setRowStretch(4, 1)   # detection scroll expands
         # -----------------------------
         # Nav Bar
         # -----------------------------
@@ -243,38 +260,46 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.confirm_toggle, 1, 3)
         layout.addWidget(self.search_box, 1, 6)
         # -----------------------------
+        # Species Filter Panel
+        # -----------------------------
+        layout.addWidget(self.species_filter_group, 2, 0, 1, 3)
+        # -----------------------------
         # Main Content Area
         # -----------------------------
         # Detection label
-        layout.addWidget(self.detection_label, 2, 0)
+        layout.addWidget(self.detection_label, 3, 0)
         # Image in center
-        layout.addWidget(self.image_label, 2, 3, 2, 3)
+        layout.addWidget(self.image_label, 3, 3, 2, 3)
         # Image list on right
-        layout.addWidget(self.image_list, 2, 6, 3, 2)
+        layout.addWidget(self.image_list, 3, 6, 3, 2)
         # -----------------------------
         # Detection Scroll Area
         # -----------------------------
-        layout.addWidget(self.detection_editor, 3, 0, 1, 3)
+        layout.addWidget(self.detection_editor, 4, 0, 1, 3)
         # -----------------------------
         # Verification Summary Box
         # -----------------------------
-        layout.addWidget(self.verification_summary_box, 4, 0, 1, 2)
+        layout.addWidget(self.verification_summary_box, 5, 0, 1, 2)
         # -----------------------------
         # Verification Controls (moved down one row)
         # -----------------------------
-        layout.addWidget(self.delete_button, 5, 1)
-        layout.addWidget(self.verification_status, 5, 2)
-        layout.addWidget(self.verify_image, 5, 3)
-        layout.addWidget(self.unverify_image_btn, 5, 4)
+        layout.addWidget(self.delete_button, 6, 1)
+        layout.addWidget(self.verification_status, 6, 2)
+        layout.addWidget(self.verify_image, 6, 3)
+        layout.addWidget(self.unverify_image_btn, 6, 4)
         # -----------------------------
         # Navigation Row
         # -----------------------------
-        layout.addWidget(self.previousImage, 6, 0)
-        layout.addWidget(self.nextImage, 6, 4)
+        layout.addWidget(self.previousImage, 7, 0)
+        layout.addWidget(self.nextImage, 7, 4)
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         self.search_box.textChanged.connect(self.filter_list)
+
+        # Populate species filter list now that widgets and labels exist
+        self.populate_species_filter_list()
+        self.cache_model_verified_species()
 
         # Final dataset initialization after widgets exist
         self.apply_filter("all")
@@ -955,6 +980,15 @@ class ImageLoader(QMainWindow):
             self.filtered_images = self.get_imgs(deleted_root,False,True)
             self.delete_button.setVisible(False)
 
+        # Apply species sub-filter (only for images with known detection data)
+        if self.species_filter:
+            filtered_by_species = []
+            for img in self.filtered_images: #type: ignore
+                species = self.get_image_species(img)
+                if species is not None and self.species_filter & species:
+                    filtered_by_species.append(img)
+            self.filtered_images = filtered_by_species
+
         if current_path and current_path in self.filtered_images:
             self.current_index = self.filtered_images.index(current_path) #type: ignore
         else:
@@ -977,6 +1011,95 @@ class ImageLoader(QMainWindow):
         self.active_labels.extend(
             [label for label in labels if label not in inactive]
         )
+        self.populate_species_filter_list()
+
+    # -----------------------------
+    # Species filter helpers
+    # -----------------------------
+    def populate_species_filter_list(self):
+        """Rebuild the species toggle-button grid from the current label set."""
+        if not hasattr(self, "_species_grid"):
+            return
+        for btn in self._species_buttons:
+            self._species_grid.removeWidget(btn)
+            btn.deleteLater()
+        self._species_buttons.clear()
+
+        cols = 5
+        for i, label in enumerate(self.labels):
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.blockSignals(True)
+            btn.setChecked(label in self.species_filter)
+            btn.blockSignals(False)
+            btn.toggled.connect(
+                lambda checked, lbl=label: self._on_species_btn_toggled(lbl, checked)
+            )
+            self._species_grid.addWidget(btn, i // cols, i % cols)
+            self._species_buttons.append(btn)
+
+    def cache_model_verified_species(self):
+        """Pre-populate species cache from batch prediction results."""
+        if not self.model_verified:
+            return
+        for det in self.model_verified:
+            path = det.get("image_path")
+            if not path:
+                continue
+            if path not in self.species_cache:
+                self.species_cache[path] = set()
+            for class_id in det.get("class_ids", []):
+                try:
+                    cid = int(class_id)
+                    if 0 <= cid < len(self.labels):
+                        self.species_cache[path].add(self.labels[cid])
+                except (ValueError, TypeError):
+                    pass
+
+    def get_image_species(self, path: str) -> "set | None":
+        """Return the set of species present in an image, or None if unknown.
+
+        Returns None for images that have no detection data (not verified and
+        not processed by batch prediction), which causes them to be excluded
+        when a species filter is active.
+        """
+        if path in self.species_cache:
+            return self.species_cache[path]
+
+        if self.training_manager.is_verified_cached(path):
+            label_path = self.get_verified_label_path(path)
+            species: set = set()
+            if label_path.exists():
+                for line in label_path.read_text(encoding="utf-8").splitlines():
+                    parts = line.strip().split()
+                    if parts:
+                        try:
+                            cid = int(parts[0])
+                            if 0 <= cid < len(self.labels):
+                                species.add(self.labels[cid])
+                        except ValueError:
+                            pass
+            self.species_cache[path] = species
+            return species
+
+        return None  # No detection data available
+
+    def _on_species_btn_toggled(self, label: str, checked: bool):
+        """Add or remove a species from the active filter and refilter."""
+        if checked:
+            self.species_filter.add(label)
+        else:
+            self.species_filter.discard(label)
+        self.refresh_filter()
+
+    def clear_species_filter(self):
+        """Uncheck all species buttons and remove the species filter."""
+        self.species_filter.clear()
+        for btn in self._species_buttons:
+            btn.blockSignals(True)
+            btn.setChecked(False)
+            btn.blockSignals(False)
+        self.refresh_filter()
     
     def start_batch_prediction(self):
         from batch_prediction import BatchPrediction
