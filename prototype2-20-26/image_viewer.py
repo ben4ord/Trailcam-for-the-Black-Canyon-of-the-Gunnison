@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QInputDialog,
-    QGroupBox
+    QGroupBox,
+    QTabWidget,
 )
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
@@ -246,9 +247,33 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Layout placement
         # -----------------------------
+        # Left-panel tab widget
+        # Consolidates detections, species filter, and summary into one area
+        # so the image can use the full available height.
+        # -----------------------------
+        self.left_tabs = QTabWidget()
+
+        det_tab = QWidget()
+        det_layout = QVBoxLayout(det_tab)
+        det_layout.setContentsMargins(2, 2, 2, 2)
+        det_layout.addWidget(self.detection_label)
+        det_layout.addWidget(self.detection_editor)
+        self.left_tabs.addTab(det_tab, "Detections")
+
+        self.left_tabs.addTab(self.species_filter_group, "Species Filter")
+
+        summary_tab = QWidget()
+        summary_layout = QVBoxLayout(summary_tab)
+        summary_layout.setContentsMargins(2, 2, 2, 2)
+        summary_layout.addWidget(self.verification_summary_box)
+        summary_layout.addStretch()
+        self.left_tabs.addTab(summary_tab, "Summary")
+
+        # -----------------------------
         # Make image area expand
+        # -----------------------------
         layout.setColumnStretch(3, 1)
-        layout.setRowStretch(4, 1)   # detection scroll expands
+        layout.setRowStretch(2, 1)   # main content row expands
         # -----------------------------
         # Nav Bar
         # -----------------------------
@@ -260,38 +285,24 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.confirm_toggle, 1, 3)
         layout.addWidget(self.search_box, 1, 6)
         # -----------------------------
-        # Species Filter Panel
+        # Main Content Area (rows 2-4)
+        # Left tabs | Image | Image list
         # -----------------------------
-        layout.addWidget(self.species_filter_group, 2, 0, 1, 3)
+        layout.addWidget(self.left_tabs, 2, 0, 3, 3)
+        layout.addWidget(self.image_label, 2, 3, 3, 3)
+        layout.addWidget(self.image_list, 2, 6, 3, 2)
         # -----------------------------
-        # Main Content Area
+        # Verification Controls
         # -----------------------------
-        # Detection label
-        layout.addWidget(self.detection_label, 3, 0)
-        # Image in center
-        layout.addWidget(self.image_label, 3, 3, 2, 3)
-        # Image list on right
-        layout.addWidget(self.image_list, 3, 6, 3, 2)
-        # -----------------------------
-        # Detection Scroll Area
-        # -----------------------------
-        layout.addWidget(self.detection_editor, 4, 0, 1, 3)
-        # -----------------------------
-        # Verification Summary Box
-        # -----------------------------
-        layout.addWidget(self.verification_summary_box, 5, 0, 1, 2)
-        # -----------------------------
-        # Verification Controls (moved down one row)
-        # -----------------------------
-        layout.addWidget(self.delete_button, 6, 1)
-        layout.addWidget(self.verification_status, 6, 2)
-        layout.addWidget(self.verify_image, 6, 3)
-        layout.addWidget(self.unverify_image_btn, 6, 4)
+        layout.addWidget(self.delete_button, 5, 1)
+        layout.addWidget(self.verification_status, 5, 2)
+        layout.addWidget(self.verify_image, 5, 3)
+        layout.addWidget(self.unverify_image_btn, 5, 4)
         # -----------------------------
         # Navigation Row
         # -----------------------------
-        layout.addWidget(self.previousImage, 7, 0)
-        layout.addWidget(self.nextImage, 7, 4)
+        layout.addWidget(self.previousImage, 6, 0)
+        layout.addWidget(self.nextImage, 6, 4)
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
