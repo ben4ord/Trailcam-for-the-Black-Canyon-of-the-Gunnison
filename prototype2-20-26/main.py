@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QLabel,
-    QWidget
+    QWidget,
 )
 from PySide6.QtCore import Qt
 from home_menu import MenuWindow
@@ -94,6 +94,13 @@ if __name__ == '__main__':
 
     app = QApplication(sys.argv)
     window = MainWindow()
+
+    try:
+        import pyi_splash
+        # Close the splash screen
+        pyi_splash.close()
+    except ImportError:
+        pass
 
     app.setStyleSheet("""
         #navBar {
