@@ -18,6 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ultralytics import YOLO
+from ultralytics.nn.tasks import load_checkpoint
 
 from app_paths import app_base_dir
 from training_config import TrainingConfig
@@ -81,6 +82,13 @@ class EventWriter:
         # Atomic-ish replace prevents partially written JSON if process dies.
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
+        # On Windows the GUI may hold a brief read lock; retry a few times before giving up.
+        for _ in range(10):
+            try:
+                tmp.replace(self.state_path)
+                return
+            except PermissionError:
+                time.sleep(0.01)
         tmp.replace(self.state_path)
 
 
@@ -341,35 +349,26 @@ def resolve_device(config_device):
     return "cpu"
 
 
-# This grabs the next folder for storing information from the training run
-def next_experiment_name(project_path: Path, requested_name: str) -> str:
-    """Generate non-colliding run names (experiment1, experiment2, ...)."""
-    name = (requested_name or "").strip() or "experiment1"
-    project_path.mkdir(parents=True, exist_ok=True)
-
-    requested_path = project_path / name
-    if not requested_path.exists():
-        return name
-
-    match = re.fullmatch(r"^(.*?)(\d+)$", name)
-    if match:
-        prefix = match.group(1)
-        start_index = int(match.group(2))
-    else:
-        prefix = name
-        start_index = 1
-
-    max_index = start_index
-    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-    for child in project_path.iterdir():
-        if not child.is_dir():
-            continue
-        folder_match = pattern.fullmatch(child.name)
-        if folder_match:
-            max_index = max(max_index, int(folder_match.group(1)))
-
-    return f"{prefix}{max_index + 1}"
-
+def _checkpoint_is_resumable(path: str):
+    """Check whether Ultralytics checkpoint has a non-negative epoch for resuming."""
+    try:
+        model, ckpt = load_checkpoint(path)
+        epoch = int(ckpt.get("epoch", -1))
+        if epoch < 0:
+            # If epoch is -1, check train_results for actual last epoch
+            train_results = ckpt.get("train_results", {})
+            if "epoch" in train_results and train_results["epoch"]:
+                epoch = int(train_results["epoch"][-1])
+                # Update the checkpoint with correct epoch
+                ckpt["epoch"] = epoch
+                # Save the corrected checkpoint
+                import torch
+                torch.save({"model": model, **ckpt}, path)
+                emit("debug", text=f"Debug: corrected checkpoint epoch from -1 to {epoch} at {path}")
+        return epoch >= 0, epoch
+    except Exception as exc:
+        emit("debug", text=f"Debug: failed to inspect checkpoint for resume at {path}: {exc}")
+        return False, None
 
 class StreamParser:
     def __init__(self, epochs: int):
@@ -622,8 +621,7 @@ def main() -> int:
         if not project_path.is_absolute():
             project_path = (base_dir / project_path).resolve()
 
-        # Avoid clobbering prior runs with same user-requested name.
-        run_name = next_experiment_name(project_path, config.name)
+        run_name = config.name
         run_dir = (project_path / run_name).resolve()
         emit("run_dir", path=str(run_dir))
 
@@ -631,9 +629,22 @@ def main() -> int:
         progress_tracker = ProgressTracker(config.epochs)
         emit("progress", progress=0, status="Loading YOLO model...")
 
+        # Resolve model path: if relative, try Models/ first (for checkpoints), then base_dir.
+        model_path = config.model
+        if model_path and not Path(model_path).is_absolute():
+            # First check if it's a checkpoint in Models/ (e.g., "experiment6/weights/best.pt")
+            models_check = (project_path / model_path).resolve()
+            if models_check.exists():
+                model_path = str(models_check)
+                print(f"Resolved model path from project directory: {model_path}")
+            else:
+                # Fall back to resolving from base_dir (for base models like "yolov8s.pt")
+                model_path = str((base_dir / model_path).resolve())
+                print(f"Resolved model path from base directory: {model_path}")
+
         # Route Ultralytics stdout/stderr through parser so UI can show key stages.
         with redirect_stdout(parser_stream), redirect_stderr(parser_stream):  # type: ignore
-            model = YOLO(config.model)
+            model = YOLO(model_path)
 
             def on_train_start(trainer):
                 # First callback confirms trainer loop is active.
@@ -684,19 +695,64 @@ def main() -> int:
             emit("progress", progress=0, status="Building training data...")
 
             # YOLO handles dataloader build + training loop + validation internally.
-            results = model.train(
-                data=str(data_path),
-                epochs=config.epochs,
-                imgsz=config.imgsz,
-                batch=config.batch,
-                device=device,
-                patience=config.patience,
-                workers=config.workers,
-                project=str(project_path),
-                name=run_name,
-                exist_ok=True,
-                verbose=True,
-            )
+
+            resume_arg = None
+            if config.resume:
+                emit("debug", text=f"Debug: resume=True, resuming from {config.model}")
+
+                if model_path and Path(model_path).exists():
+                    # Check if resumable and not completed
+                    resumable, ckpt_epoch = _checkpoint_is_resumable(model_path)
+                    if resumable and ckpt_epoch >= config.epochs:
+                        resume_arg = False
+                        emit("log", text=f"Checkpoint has already completed {ckpt_epoch} epochs (target: {config.epochs}). Starting fresh training from weights.")
+                        emit("debug", text=f"Debug: checkpoint already finished, using as pretrained weights")
+                    elif resumable and ckpt_epoch < config.epochs:
+                        resume_arg = model_path
+                        emit("debug", text=f"Debug: training will resume from checkpoint {resume_arg} (epoch {ckpt_epoch})")
+                    else:
+                        resume_arg = model_path  # Try anyway, fallback will handle
+                        emit("debug", text=f"Debug: attempting resume from checkpoint {resume_arg} (epoch {ckpt_epoch}), will fallback if fails")
+                else:
+                    resume_arg = False
+                    emit("log", text=f"Resume path {model_path} not found. Starting fresh training.")
+                    emit("debug", text=f"Debug: resume requested but path does not exist: {model_path}")
+
+            try:
+                results = model.train(
+                    data=str(data_path),
+                    epochs=config.epochs,
+                    imgsz=config.imgsz,
+                    batch=config.batch,
+                    device=device,
+                    patience=config.patience,
+                    workers=config.workers,
+                    project=str(project_path),
+                    name=run_name,
+                    exist_ok=True,
+                    verbose=True,
+                    resume=resume_arg,
+                )
+            except AssertionError as e:
+                if "nothing to resume" in str(e) and resume_arg:
+                    emit("log", text=f"Resume failed: {e}. Falling back to fresh training from weights.")
+                    emit("debug", text=f"Debug: resume assertion failed, retrying with resume=False")
+                    results = model.train(
+                        data=str(data_path),
+                        epochs=config.epochs,
+                        imgsz=config.imgsz,
+                        batch=config.batch,
+                        device=device,
+                        patience=config.patience,
+                        workers=config.workers,
+                        project=str(project_path),
+                        name=run_name,
+                        exist_ok=True,
+                        verbose=True,
+                        resume=False,  # Fallback to fresh training
+                    )
+                else:
+                    raise
             parser_stream.flush()
 
         # save_dir can vary by Ultralytics version; fallback to planned run_dir.

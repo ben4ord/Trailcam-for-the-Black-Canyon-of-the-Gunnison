@@ -5,6 +5,7 @@ which launches `training_subprocess.py` and exposes a polling snapshot API.
 """
 
 import os
+import re
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QGuiApplication
@@ -20,6 +21,7 @@ import qtawesome as qta
 from training_config import TrainingConfig
 from training_session import get_training_session
 from ui_dialogs import confirm_action
+import datetime
 
 
 class TrainModel(QMainWindow):
@@ -28,7 +30,7 @@ class TrainModel(QMainWindow):
         self.drive = drive
         # Shared variable keeps run state consistent across reopened windows.
         self.session = get_training_session()
-        self.abort_force_ms = 180000 # 3 minutes
+        self.abort_force_ms = 30000 # 30 seconds
         self.last_completion_counter = -1
         self.last_debug_text = ""
         self.last_log_text = ""
@@ -84,11 +86,10 @@ class TrainModel(QMainWindow):
         self.progress_bar.setFormat("0.0%")
         layout.addWidget(self.progress_bar)
 
-        # Keep a compact log box for failures only.
+        # Log box for training messages and errors.
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumHeight(120)
-        self.log_view.hide()
         layout.addWidget(self.log_view)
 
         # Train Button
@@ -123,12 +124,17 @@ class TrainModel(QMainWindow):
 
         self.populate_model_dropdown()
 
+        # Resume Button
+        self.resume_btn = QPushButton("Resume Last Training")
+        self.resume_btn.clicked.connect(self.resume_training)
+
         # Stop Button
         self.stop_btn = QPushButton("Abort Training")
         self.stop_btn.clicked.connect(self.abort_training)
         self.stop_btn.setEnabled(False)
 
         layout.addWidget(self.train_btn)
+        layout.addWidget(self.resume_btn)
         layout.addWidget(self.stop_btn)
 
         self.refresh_timer = QTimer(self)
@@ -158,18 +164,14 @@ class TrainModel(QMainWindow):
         self.model_combo.addItem("Train from scratch", userData=None)
 
         models_dir = os.path.join(os.path.dirname(__file__), "Models")
-        print(f"Looking for models in: {models_dir}")
-        print(f"Directory exists: {os.path.isdir(models_dir)}")
         if os.path.isdir(models_dir):
-            print(f"Contents: {os.listdir(models_dir)}")
-            for f in sorted(os.listdir(models_dir)):
-                if f.endswith(".pt"):
-                    print(f"Found model file: {f}")
-                    print(f"Models dir path: {models_dir}")
-                    full_path = os.path.join(models_dir, f)
-                    # Keep file name in userData; training config resolves path later.
-                    self.model_combo.addItem(f, userData=f) #replace user data with full path if needed
-
+            for (root, dirs, files) in os.walk(models_dir):
+                for f in files:
+                    if f.endswith(".pt"):
+                        full_path = os.path.join(root,f)
+                        relative_path = os.path.relpath(full_path, start=models_dir)
+                        if f != "last.pt": #ignore last.pt file
+                            self.model_combo.addItem(relative_path, userData=relative_path)
         self.model_combo.blockSignals(False)
         self.on_model_selected(self.model_combo.currentIndex())
 
@@ -177,22 +179,74 @@ class TrainModel(QMainWindow):
     def on_model_selected(self, index):
         """Update primary action text to reflect selected base model."""
         selected_txt = self.model_combo.currentText()
-        print(f"Selected model: {self.model_combo.currentData()}")
+
+        selected_model = self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt"
+        last_model = self.get_corresponding_last_pt(selected_model)
         
         if index == 0:
             self.train_btn.setText("Train New Model")
         else:
             self.train_btn.setText(f"Train Using '{selected_txt}'")
+            self.resume_btn.setText(f"Resume Using '{last_model}'")
 
     # Get the user device (this is for GPU usage when training, should work on Mac as well)
     def get_device(self):
-        """Legacy helper kept for reference if manual device controls are re-added."""
+        """Device control"""
         if torch.cuda.is_available():
             return "0"          # Windows/Linux with NVIDIA GPU
         elif torch.backends.mps.is_available():
             return "mps"        # Apple Silicon Mac
         else:
             return "cpu"        # Fallback
+
+    def get_corresponding_last_pt(self, model_path: str) -> str:
+        """Get the corresponding last.pt from the same directory as the selected model."""
+        if not model_path:
+            return "yolov8s.pt"
+        
+        # Get the directory containing the model
+        model_dir = os.path.dirname(model_path)
+        
+        # Construct path to last.pt in the same directory
+        last_pt_path = os.path.join(model_dir, "last.pt")
+        
+        # Verify it exists relative to Models folder
+        models_dir = os.path.join(os.path.dirname(__file__), "Models")
+        full_last_pt_path = os.path.join(models_dir, last_pt_path)
+        
+        if os.path.isfile(full_last_pt_path):
+            return last_pt_path
+        
+        # If last.pt doesn't exist, return the original model path
+        return model_path
+    
+    def resume_training(self):
+        """Resume the last training run based on selection"""
+        selected_model = self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt"
+        last_model = self.get_corresponding_last_pt(selected_model)
+
+        
+        if not confirm_action(
+            self,
+            "Resume Training",
+            f"Are you sure you want to resume training {last_model}?",
+        ):
+            return
+        
+        config = TrainingConfig(model=last_model, device=self.get_device())
+        config.resume = True
+        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+        config.name = os.path.basename(run_name)
+        ok, message = self.session.start(self.drive, config)
+        if not ok:
+            QMessageBox.information(self, "Training Busy", message)
+            return
+
+        self.set_busy_progress()
+        self.progress_label.setText("Launching training...")
+        self.debug_label.setText("Debug: waiting for first completed epoch...")
+        self.refresh_session_ui()
+
 
     # This is to start training on a completely new model (no previous weights)
     # This calls the session.start which launches a function in traning_session.py
@@ -279,7 +333,11 @@ class TrainModel(QMainWindow):
             self.debug_view.setPlainText(debug_text)
             self.last_debug_text = debug_text
 
-        self.last_log_text = "\n".join(snapshot["log_lines"])
+        log_text = "\n".join(snapshot["log_lines"])
+        if log_text != self.last_log_text:
+            self.log_view.setPlainText(log_text)
+            self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+            self.last_log_text = log_text
 
         status = snapshot["status"]
         progress = int(snapshot["progress"])
