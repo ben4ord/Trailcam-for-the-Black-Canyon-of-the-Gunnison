@@ -16,9 +16,10 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QInputDialog,
-    QGroupBox
+    QGroupBox,
+    QTabWidget,
 )
-from PySide6.QtWidgets import QHBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
 from PySide6.QtCore import Qt
 import qtawesome as qta
@@ -54,8 +55,10 @@ class ImageLoader(QMainWindow):
         self.label_store = LabelStore()
         self.model_verified = model_verified
         self.model_discarded = model_discarded
+        self.species_filter: set = set()
+        self.species_cache: dict = {}
         self.creation_boxes = []
-        self._temp_point = None
+        self.temp_point = None
         self.original_height = None
         self.original_width = None
         if model_verified:
@@ -157,6 +160,21 @@ class ImageLoader(QMainWindow):
             self.on_image_filter_changed
         )
 
+        # Species filter panel — grid of toggle buttons, one per label
+        self.species_filter_group = QGroupBox("Filter by Species")
+        species_vbox = QVBoxLayout()
+        species_vbox.setContentsMargins(4, 4, 4, 4)
+        species_vbox.setSpacing(4)
+        self.species_buttons: list = []
+        self.species_btn_widget = QWidget()
+        self.species_grid = QGridLayout(self.species_btn_widget)
+        self.species_grid.setContentsMargins(0, 0, 0, 0)
+        self.species_grid.setSpacing(3)
+        self.clear_species_btn = QPushButton("Clear All")
+        self.clear_species_btn.clicked.connect(self.clear_species_filter)
+        species_vbox.addWidget(self.species_btn_widget)
+        species_vbox.addWidget(self.clear_species_btn)
+        self.species_filter_group.setLayout(species_vbox)
 
         # -----------------------------
         # Image display
@@ -229,9 +247,33 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Layout placement
         # -----------------------------
+        # Left-panel tab widget
+        # Consolidates detections, species filter, and summary into one area
+        # so the image can use the full available height.
+        # -----------------------------
+        self.left_tabs = QTabWidget()
+
+        det_tab = QWidget()
+        det_layout = QVBoxLayout(det_tab)
+        det_layout.setContentsMargins(2, 2, 2, 2)
+        det_layout.addWidget(self.detection_label)
+        det_layout.addWidget(self.detection_editor)
+        self.left_tabs.addTab(det_tab, "Detections")
+
+        self.left_tabs.addTab(self.species_filter_group, "Species Filter")
+
+        summary_tab = QWidget()
+        summary_layout = QVBoxLayout(summary_tab)
+        summary_layout.setContentsMargins(2, 2, 2, 2)
+        summary_layout.addWidget(self.verification_summary_box)
+        summary_layout.addStretch()
+        self.left_tabs.addTab(summary_tab, "Summary")
+
+        # -----------------------------
         # Make image area expand
+        # -----------------------------
         layout.setColumnStretch(3, 1)
-        layout.setRowStretch(3, 1)   # detection scroll expands
+        layout.setRowStretch(2, 1)   # main content row expands
         # -----------------------------
         # Nav Bar
         # -----------------------------
@@ -243,24 +285,14 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.confirm_toggle, 1, 3)
         layout.addWidget(self.search_box, 1, 6)
         # -----------------------------
-        # Main Content Area
+        # Main Content Area (rows 2-4)
+        # Left tabs | Image | Image list
         # -----------------------------
-        # Detection label
-        layout.addWidget(self.detection_label, 2, 0)
-        # Image in center
-        layout.addWidget(self.image_label, 2, 3, 2, 3)
-        # Image list on right
+        layout.addWidget(self.left_tabs, 2, 0, 3, 3)
+        layout.addWidget(self.image_label, 2, 3, 3, 3)
         layout.addWidget(self.image_list, 2, 6, 3, 2)
         # -----------------------------
-        # Detection Scroll Area
-        # -----------------------------
-        layout.addWidget(self.detection_editor, 3, 0, 1, 3)
-        # -----------------------------
-        # Verification Summary Box
-        # -----------------------------
-        layout.addWidget(self.verification_summary_box, 4, 0, 1, 2)
-        # -----------------------------
-        # Verification Controls (moved down one row)
+        # Verification Controls
         # -----------------------------
         layout.addWidget(self.delete_button, 5, 1)
         layout.addWidget(self.verification_status, 5, 2)
@@ -275,6 +307,10 @@ class ImageLoader(QMainWindow):
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
         self.search_box.textChanged.connect(self.filter_list)
+
+        # Populate species filter list now that widgets and labels exist
+        self.populate_species_filter_list()
+        self.cache_model_verified_species()
 
         # Final dataset initialization after widgets exist
         self.apply_filter("all")
@@ -955,6 +991,15 @@ class ImageLoader(QMainWindow):
             self.filtered_images = self.get_imgs(deleted_root,False,True)
             self.delete_button.setVisible(False)
 
+        # Apply species sub-filter (only for images with known detection data)
+        if self.species_filter:
+            filtered_by_species = []
+            for img in self.filtered_images: #type: ignore
+                species = self.get_image_species(img)
+                if species is not None and self.species_filter & species:
+                    filtered_by_species.append(img)
+            self.filtered_images = filtered_by_species
+
         if current_path and current_path in self.filtered_images:
             self.current_index = self.filtered_images.index(current_path) #type: ignore
         else:
@@ -977,6 +1022,95 @@ class ImageLoader(QMainWindow):
         self.active_labels.extend(
             [label for label in labels if label not in inactive]
         )
+        self.populate_species_filter_list()
+
+    # -----------------------------
+    # Species filter helpers
+    # -----------------------------
+    def populate_species_filter_list(self):
+        """Rebuild the species toggle-button grid from the current label set."""
+        if not hasattr(self, "species_grid"):
+            return
+        for btn in self.species_buttons:
+            self.species_grid.removeWidget(btn)
+            btn.deleteLater()
+        self.species_buttons.clear()
+
+        cols = 5
+        for i, label in enumerate(self.labels):
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.blockSignals(True)
+            btn.setChecked(label in self.species_filter)
+            btn.blockSignals(False)
+            btn.toggled.connect(
+                lambda checked, lbl=label: self.on_species_btn_toggled(lbl, checked)
+            )
+            self.species_grid.addWidget(btn, i // cols, i % cols)
+            self.species_buttons.append(btn)
+
+    def cache_model_verified_species(self):
+        """Pre-populate species cache from batch prediction results."""
+        if not self.model_verified:
+            return
+        for det in self.model_verified:
+            path = det.get("image_path")
+            if not path:
+                continue
+            if path not in self.species_cache:
+                self.species_cache[path] = set()
+            for class_id in det.get("class_ids", []):
+                try:
+                    cid = int(class_id)
+                    if 0 <= cid < len(self.labels):
+                        self.species_cache[path].add(self.labels[cid])
+                except (ValueError, TypeError):
+                    pass
+
+    def get_image_species(self, path: str) -> "set | None":
+        """Return the set of species present in an image, or None if unknown.
+
+        Returns None for images that have no detection data (not verified and
+        not processed by batch prediction), which causes them to be excluded
+        when a species filter is active.
+        """
+        if path in self.species_cache:
+            return self.species_cache[path]
+
+        if self.training_manager.is_verified_cached(path):
+            label_path = self.get_verified_label_path(path)
+            species: set = set()
+            if label_path.exists():
+                for line in label_path.read_text(encoding="utf-8").splitlines():
+                    parts = line.strip().split()
+                    if parts:
+                        try:
+                            cid = int(parts[0])
+                            if 0 <= cid < len(self.labels):
+                                species.add(self.labels[cid])
+                        except ValueError:
+                            pass
+            self.species_cache[path] = species
+            return species
+
+        return None  # No detection data available
+
+    def on_species_btn_toggled(self, label: str, checked: bool):
+        """Add or remove a species from the active filter and refilter."""
+        if checked:
+            self.species_filter.add(label)
+        else:
+            self.species_filter.discard(label)
+        self.refresh_filter()
+
+    def clear_species_filter(self):
+        """Uncheck all species buttons and remove the species filter."""
+        self.species_filter.clear()
+        for btn in self.species_buttons:
+            btn.blockSignals(True)
+            btn.setChecked(False)
+            btn.blockSignals(False)
+        self.refresh_filter()
     
     def start_batch_prediction(self):
         from batch_prediction import BatchPrediction
@@ -1003,10 +1137,10 @@ class ImageLoader(QMainWindow):
         if img_x is None:
             return  # Click was outside image
 
-        if self._temp_point is None:
-            self._temp_point = (img_x, img_y)
+        if self.temp_point is None:
+            self.temp_point = (img_x, img_y)
         else:
-            x1, y1 = self._temp_point
+            x1, y1 = self.temp_point
             x2, y2 = img_x, img_y
 
             x_min = min(x1, x2)
@@ -1036,7 +1170,7 @@ class ImageLoader(QMainWindow):
                 "bbox_xywhn": [x_center_n, y_center_n, box_w_n, box_h_n],
             })
             self.creation_boxes.append([x_min, y_min, x_max, y_max])
-            self._temp_point = None
+            self.temp_point = None
 
             self.update_display(creation=True, creationBoxes=self.creation_boxes)
 
