@@ -144,6 +144,7 @@ class ImageLoader(QMainWindow):
         self.unverify_image_btn.setIcon(qta.icon('fa6s.circle-xmark'))
         self.unverify_image_btn.setToolTip("Unverify Image")
         self.unverify_image_btn.clicked.connect(self.unverify_image)
+        self.unverify_image_btn.setEnabled(False)
 
         self.confirm_toggle = QCheckBox("Enable prompts and popups")
         self.confirm_toggle.setChecked(True)
@@ -807,11 +808,13 @@ class ImageLoader(QMainWindow):
             self.verification_status.setText("Verified")
             self.verification_status.setStyleSheet("color: green; font-weight: bold;")
             self.verify_image.setEnabled(False)
+            self.unverify_image_btn.setEnabled(True)
             self.image_label.setStyleSheet("border: 4px solid green;")
         else:
             self.verification_status.setText("Not Verified")
             self.verification_status.setStyleSheet("color: red;")
             self.verify_image.setEnabled(True)
+            self.unverify_image_btn.setEnabled(False)
             self.image_label.setStyleSheet("")
     
     def mark_verified(self):
