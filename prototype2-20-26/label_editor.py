@@ -14,42 +14,39 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from collapsiblepane import CollapsiblePane
 import qtawesome as qta
-from nav_bar import NavBar
 from label_store import LabelStore
 from ui_dialogs import confirm_action
+from nav_bar import NavBar
 
 class LabelEditor(QDialog):
     def __init__(self, parent=None):
         super().__init__()
         self.path = Path.cwd() / "classes.txt"
-        self.yaml = Path.cwd() / "data.yaml"        
-        
+        self.yaml = Path.cwd() / "data.yaml"
+
         self.label_store = LabelStore()
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
-        self.setContentsMargins(0, 0, 0, 0)
-
-        # -----------------------------
-        # Window Setup
-        # -----------------------------
-        outer_layout = QVBoxLayout(self)
-        self.setLayout(outer_layout)
-        layout = QHBoxLayout()
-
         self.resize(500, 400)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
 
-        # nav bar
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        self.setLayout(outer_layout)
+
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
-            home=False,
-            update_labels=False,
-            new_folder=False,
-            training_status=False,
+            home=False, update_labels=False, new_folder=False, training_status=False
         )
-
         outer_layout.addWidget(self.nav_bar)
-        outer_layout.addLayout(layout)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(8, 8, 8, 8)
+        outer_layout.addWidget(content_widget, stretch=1)
+
+        layout = QHBoxLayout()
+        content_layout.addLayout(layout)
 
         # -----------------------------
         # Left Panel

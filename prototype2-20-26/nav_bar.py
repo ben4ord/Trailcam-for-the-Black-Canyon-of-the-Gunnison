@@ -1,6 +1,10 @@
 from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
 import qtawesome as qta
+
+def icon(name: str):
+    """Return a qtawesome icon forced to white regardless of system theme."""
+    return qta.icon(name, color='white')  # type: ignore[call-arg]
 from training_session import get_training_session
 
 
@@ -32,25 +36,25 @@ class NavBar(QWidget):
         # Icons can be found here: https://fontawesome.com/v6/search?ic=free-collection
         # Home button
         self.home_btn = QPushButton()
-        self.home_btn.setIcon(qta.icon('fa6s.house'))
+        self.home_btn.setIcon(icon('fa6s.house'))
         self.home_btn.setToolTip("Home")
         self.home_btn.clicked.connect(self.homeClicked.emit)
 
         # Update labels button
         self.update_labels_btn = QPushButton()
-        self.update_labels_btn.setIcon(qta.icon('fa6s.file-pen'))
+        self.update_labels_btn.setIcon(icon('fa6s.file-pen'))
         self.update_labels_btn.setToolTip("Update Class Labels")
         self.update_labels_btn.clicked.connect(self.updateLabelsClicked.emit)
 
         # Select new folder button
         self.new_folder_btn = QPushButton()
-        self.new_folder_btn.setIcon(qta.icon('fa6s.folder'))
+        self.new_folder_btn.setIcon(icon('fa6s.folder'))
         self.new_folder_btn.setToolTip("Select New Directory")
         self.new_folder_btn.clicked.connect(self.newFolderClicked.emit)
         
         # Do new batch prediction 
         self.new_batch_btn = QPushButton()
-        self.new_batch_btn.setIcon(qta.icon('fa6s.object-group'))
+        self.new_batch_btn.setIcon(icon('fa6s.object-group'))
         self.new_batch_btn.setToolTip("New Batch Prediction")
         self.new_batch_btn.clicked.connect(self.newBatchClicked.emit)
 
@@ -72,16 +76,16 @@ class NavBar(QWidget):
 
         # Window controls (Top right)
         self.min_btn = QPushButton()
-        self.min_btn.setIcon(qta.icon('fa6s.minus'))
+        self.min_btn.setIcon(icon('fa6s.minus'))
         self.min_btn.setToolTip("Minimize")
         self.min_btn.clicked.connect(self.parent_window.showMinimized)
 
         self.max_btn = QPushButton()
-        self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
+        self.max_btn.setIcon(icon('fa6s.window-maximize'))
         self.max_btn.clicked.connect(self.toggle_max_restore)
 
         self.close_btn = QPushButton()
-        self.close_btn.setIcon(qta.icon('fa6s.xmark'))
+        self.close_btn.setIcon(icon('fa6s.xmark'))
         self.close_btn.setToolTip("Close")
         self.close_btn.clicked.connect(self.parent_window.close)
 
@@ -106,11 +110,11 @@ class NavBar(QWidget):
     def toggle_max_restore(self):
         if self.parent_window.isMaximized():
             self.parent_window.showNormal()
-            self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
+            self.max_btn.setIcon(icon('fa6s.window-maximize'))
             self.max_btn.setToolTip("Restore")
         else:
             self.parent_window.showMaximized()
-            self.max_btn.setIcon(qta.icon('fa6s.window-restore'))
+            self.max_btn.setIcon(icon('fa6s.window-restore'))
             self.max_btn.setToolTip("Maximize")
 
     # Check what the mouse click actually is (double click, click & drag, etc.)
@@ -163,7 +167,7 @@ class NavBar(QWidget):
 
                     self.drag_position = global_pos - self.parent_window.frameGeometry().topLeft()
 
-                    self.max_btn.setIcon(qta.icon('fa6s.window-maximize'))
+                    self.max_btn.setIcon(icon('fa6s.window-maximize'))
                     self.max_btn.setToolTip("Maximize")
 
                     return True
