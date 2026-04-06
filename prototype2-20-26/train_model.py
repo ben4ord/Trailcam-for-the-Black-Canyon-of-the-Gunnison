@@ -95,6 +95,16 @@ class TrainModel(QMainWindow):
         self.train_btn = QPushButton("Train New Model")
         self.train_btn.clicked.connect(self.train_new_model)
 
+        # Config (intensity) selector
+        config_row = QHBoxLayout()
+        config_row.addWidget(QLabel("Training Intensity:"))
+        self.config_combo = QComboBox()
+        self.config_combo.addItem("Light  (small batch, 512px) — low-end hardware", userData="small")
+        self.config_combo.addItem("Medium (medium batch, 640px) — mid-range hardware", userData="medium")
+        self.config_combo.addItem("Heavy  (large batch, 724px) — high-end hardware", userData="large")
+        config_row.addWidget(self.config_combo)
+        layout.addLayout(config_row)
+
         # Model Selector
         model_row = QHBoxLayout()
 
@@ -195,7 +205,14 @@ class TrainModel(QMainWindow):
         ):
             return
 
-        ok, message = self.session.start(self.drive, TrainingConfig())
+        config_key = self.config_combo.currentData()
+        config_builders = {
+            "small": TrainingConfig.small,
+            "medium": TrainingConfig.medium,
+            "large": TrainingConfig.large,
+        }
+        training_config = config_builders[config_key]()
+        ok, message = self.session.start(self.drive, training_config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
             return
