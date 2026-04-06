@@ -58,7 +58,7 @@ class ImageLoader(QMainWindow):
         self.species_filter: set = set()
         self.species_cache: dict = {}
         self.creation_boxes = []
-        self._temp_point = None
+        self.temp_point = None
         self.original_height = None
         self.original_width = None
         if model_verified:
@@ -165,14 +165,14 @@ class ImageLoader(QMainWindow):
         species_vbox = QVBoxLayout()
         species_vbox.setContentsMargins(4, 4, 4, 4)
         species_vbox.setSpacing(4)
-        self._species_buttons: list = []
-        self._species_btn_widget = QWidget()
-        self._species_grid = QGridLayout(self._species_btn_widget)
-        self._species_grid.setContentsMargins(0, 0, 0, 0)
-        self._species_grid.setSpacing(3)
+        self.species_buttons: list = []
+        self.species_btn_widget = QWidget()
+        self.species_grid = QGridLayout(self.species_btn_widget)
+        self.species_grid.setContentsMargins(0, 0, 0, 0)
+        self.species_grid.setSpacing(3)
         self.clear_species_btn = QPushButton("Clear All")
         self.clear_species_btn.clicked.connect(self.clear_species_filter)
-        species_vbox.addWidget(self._species_btn_widget)
+        species_vbox.addWidget(self.species_btn_widget)
         species_vbox.addWidget(self.clear_species_btn)
         self.species_filter_group.setLayout(species_vbox)
 
@@ -1029,12 +1029,12 @@ class ImageLoader(QMainWindow):
     # -----------------------------
     def populate_species_filter_list(self):
         """Rebuild the species toggle-button grid from the current label set."""
-        if not hasattr(self, "_species_grid"):
+        if not hasattr(self, "species_grid"):
             return
-        for btn in self._species_buttons:
-            self._species_grid.removeWidget(btn)
+        for btn in self.species_buttons:
+            self.species_grid.removeWidget(btn)
             btn.deleteLater()
-        self._species_buttons.clear()
+        self.species_buttons.clear()
 
         cols = 5
         for i, label in enumerate(self.labels):
@@ -1044,10 +1044,10 @@ class ImageLoader(QMainWindow):
             btn.setChecked(label in self.species_filter)
             btn.blockSignals(False)
             btn.toggled.connect(
-                lambda checked, lbl=label: self._on_species_btn_toggled(lbl, checked)
+                lambda checked, lbl=label: self.on_species_btn_toggled(lbl, checked)
             )
-            self._species_grid.addWidget(btn, i // cols, i % cols)
-            self._species_buttons.append(btn)
+            self.species_grid.addWidget(btn, i // cols, i % cols)
+            self.species_buttons.append(btn)
 
     def cache_model_verified_species(self):
         """Pre-populate species cache from batch prediction results."""
@@ -1095,7 +1095,7 @@ class ImageLoader(QMainWindow):
 
         return None  # No detection data available
 
-    def _on_species_btn_toggled(self, label: str, checked: bool):
+    def on_species_btn_toggled(self, label: str, checked: bool):
         """Add or remove a species from the active filter and refilter."""
         if checked:
             self.species_filter.add(label)
@@ -1106,7 +1106,7 @@ class ImageLoader(QMainWindow):
     def clear_species_filter(self):
         """Uncheck all species buttons and remove the species filter."""
         self.species_filter.clear()
-        for btn in self._species_buttons:
+        for btn in self.species_buttons:
             btn.blockSignals(True)
             btn.setChecked(False)
             btn.blockSignals(False)
@@ -1137,10 +1137,10 @@ class ImageLoader(QMainWindow):
         if img_x is None:
             return  # Click was outside image
 
-        if self._temp_point is None:
-            self._temp_point = (img_x, img_y)
+        if self.temp_point is None:
+            self.temp_point = (img_x, img_y)
         else:
-            x1, y1 = self._temp_point
+            x1, y1 = self.temp_point
             x2, y2 = img_x, img_y
 
             x_min = min(x1, x2)
@@ -1170,7 +1170,7 @@ class ImageLoader(QMainWindow):
                 "bbox_xywhn": [x_center_n, y_center_n, box_w_n, box_h_n],
             })
             self.creation_boxes.append([x_min, y_min, x_max, y_max])
-            self._temp_point = None
+            self.temp_point = None
 
             self.update_display(creation=True, creationBoxes=self.creation_boxes)
 
