@@ -82,6 +82,13 @@ class EventWriter:
         # Atomic-ish replace prevents partially written JSON if process dies.
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
+        # On Windows the GUI may hold a brief read lock; retry a few times before giving up.
+        for _ in range(10):
+            try:
+                tmp.replace(self.state_path)
+                return
+            except PermissionError:
+                time.sleep(0.01)
         tmp.replace(self.state_path)
 
 

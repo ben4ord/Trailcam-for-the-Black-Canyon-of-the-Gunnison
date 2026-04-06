@@ -30,7 +30,7 @@ class TrainModel(QMainWindow):
         self.drive = drive
         # Shared variable keeps run state consistent across reopened windows.
         self.session = get_training_session()
-        self.abort_force_ms = 180000 # 3 minutes
+        self.abort_force_ms = 30000 # 30 seconds
         self.last_completion_counter = -1
         self.last_debug_text = ""
         self.last_log_text = ""
@@ -86,11 +86,10 @@ class TrainModel(QMainWindow):
         self.progress_bar.setFormat("0.0%")
         layout.addWidget(self.progress_bar)
 
-        # Keep a compact log box for failures only.
+        # Log box for training messages and errors.
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumHeight(120)
-        self.log_view.hide()
         layout.addWidget(self.log_view)
 
         # Train Button
@@ -226,7 +225,7 @@ class TrainModel(QMainWindow):
         
         config = TrainingConfig(model=last_model, device=self.get_device())
         config.resume = True
-        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
+        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
         config.name = os.path.basename(run_name)
         ok, message = self.session.start(self.drive, config)
         if not ok:
@@ -251,7 +250,7 @@ class TrainModel(QMainWindow):
             return
 
         config = TrainingConfig(model=self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt", device=self.get_device())
-        config.name= datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
+        config.name = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
         ok, message = self.session.start(self.drive, config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
@@ -319,7 +318,11 @@ class TrainModel(QMainWindow):
             self.debug_view.setPlainText(debug_text)
             self.last_debug_text = debug_text
 
-        self.last_log_text = "\n".join(snapshot["log_lines"])
+        log_text = "\n".join(snapshot["log_lines"])
+        if log_text != self.last_log_text:
+            self.log_view.setPlainText(log_text)
+            self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+            self.last_log_text = log_text
 
         status = snapshot["status"]
         progress = int(snapshot["progress"])
