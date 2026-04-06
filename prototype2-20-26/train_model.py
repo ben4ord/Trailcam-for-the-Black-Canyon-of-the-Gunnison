@@ -21,6 +21,7 @@ import qtawesome as qta
 from training_config import TrainingConfig
 from training_session import get_training_session
 from ui_dialogs import confirm_action
+from label_store import LabelStore
 import datetime
 
 
@@ -51,6 +52,7 @@ class TrainModel(QMainWindow):
             new_folder=False,
         )
         self.nav_bar.homeClicked.connect(self.menu_window)
+        self.nav_bar.updateLabelsClicked.connect(self.open_label_editor)
 
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -259,6 +261,19 @@ class TrainModel(QMainWindow):
     # This calls the session.start which launches a function in traning_session.py
     def train_new_model(self):
         """Confirm and launch a new training run via TrainingSession."""
+        label_store = LabelStore()
+        all_labels = label_store.read_labels()
+        inactive = set(label_store.read_inactive_labels())
+        active_labels = [l for l in all_labels if l not in inactive]
+        if not active_labels:
+            QMessageBox.warning(
+                self,
+                "No Active Labels",
+                "All labels are currently inactive.\n\n"
+                "Enable at least one label in the label editor before training.",
+            )
+            return
+
         if not confirm_action(
             self,
             "Start Training",
@@ -416,6 +431,12 @@ class TrainModel(QMainWindow):
         self.debug_label.setText("Debug: logs copied to clipboard.")
 
     # Menu window from the nav_bar
+    def open_label_editor(self):
+        """Open the label editor dialog."""
+        from label_editor import LabelEditor
+        editor = LabelEditor(self)
+        editor.exec()
+
     def menu_window(self):
         """Navigate back to home menu."""
         from home_menu import MenuWindow

@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QGroupBox,
     QTabWidget,
+    QSplitter,
+    QScrollArea,
 )
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
@@ -172,7 +174,14 @@ class ImageLoader(QMainWindow):
         self.species_grid.setSpacing(3)
         self.clear_species_btn = QPushButton("Clear All")
         self.clear_species_btn.clicked.connect(self.clear_species_filter)
-        species_vbox.addWidget(self.species_btn_widget)
+        # Wrap buttons in a scroll area so the grid doesn't force a minimum
+        # panel width — the user can shrink the left panel freely.
+        species_scroll = QScrollArea()
+        species_scroll.setWidget(self.species_btn_widget)
+        species_scroll.setWidgetResizable(True)
+        species_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        species_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        species_vbox.addWidget(species_scroll)
         species_vbox.addWidget(self.clear_species_btn)
         self.species_filter_group.setLayout(species_vbox)
 
@@ -182,7 +191,9 @@ class ImageLoader(QMainWindow):
         self.image_label = QLabel("No images found")
         self.image_label = ClickableLabel()
         self.image_label.clicked.connect(self.on_image_clicked)
+        self.image_label.resized.connect(self.update_display)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setMinimumSize(1, 1)
 
         self.image_list = QListWidget()
 
@@ -270,39 +281,53 @@ class ImageLoader(QMainWindow):
         self.left_tabs.addTab(summary_tab, "Summary")
 
         # -----------------------------
-        # Make image area expand
+        # Bottom action bar
+        # Edit the HBoxLayout order below to rearrange buttons.
         # -----------------------------
-        layout.setColumnStretch(3, 1)
-        layout.setRowStretch(2, 1)   # main content row expands
+        bottom_bar = QWidget()
+        bottom_layout = QHBoxLayout(bottom_bar)
+        bottom_layout.setContentsMargins(4, 4, 4, 4)
+        bottom_layout.setSpacing(6)
+        bottom_layout.addWidget(self.previousImage)
+        bottom_layout.addWidget(self.delete_button)
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(self.verification_status)
+        bottom_layout.addWidget(self.verify_image)
+        bottom_layout.addWidget(self.unverify_image_btn)
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(self.nextImage)
+
         # -----------------------------
+        # Main content splitter
+        # Drag the dividers at runtime to give the image more/less space.
+        # -----------------------------
+        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter.addWidget(self.left_tabs)
+        content_splitter.addWidget(self.image_label)
+        content_splitter.addWidget(self.image_list)
+        # Initial size ratios: left panel small, image large, list small
+        content_splitter.setStretchFactor(0, 1)
+        content_splitter.setStretchFactor(1, 5)
+        content_splitter.setStretchFactor(2, 1)
+        content_splitter.setCollapsible(0, False)
+        content_splitter.setCollapsible(1, False)
+        content_splitter.setCollapsible(2, False)
+
+        # -----------------------------
+        # Grid: 4 columns, stretch col 2 to push search box right
+        # -----------------------------
+        layout.setColumnStretch(2, 1)
+        layout.setRowStretch(2, 1)  # splitter row expands
         # Nav Bar
-        # -----------------------------
-        layout.addWidget(self.nav_bar, 0, 0, 1, 8)
-        # -----------------------------
-        # Top Controls Row
-        # -----------------------------
-        layout.addWidget(self.filter_dropdown, 1, 0, 1, 3)
-        layout.addWidget(self.confirm_toggle, 1, 3)
-        layout.addWidget(self.search_box, 1, 6)
-        # -----------------------------
-        # Main Content Area (rows 2-4)
-        # Left tabs | Image | Image list
-        # -----------------------------
-        layout.addWidget(self.left_tabs, 2, 0, 3, 3)
-        layout.addWidget(self.image_label, 2, 3, 3, 3)
-        layout.addWidget(self.image_list, 2, 6, 3, 2)
-        # -----------------------------
-        # Verification Controls
-        # -----------------------------
-        layout.addWidget(self.delete_button, 5, 1)
-        layout.addWidget(self.verification_status, 5, 2)
-        layout.addWidget(self.verify_image, 5, 3)
-        layout.addWidget(self.unverify_image_btn, 5, 4)
-        # -----------------------------
-        # Navigation Row
-        # -----------------------------
-        layout.addWidget(self.previousImage, 6, 0)
-        layout.addWidget(self.nextImage, 6, 4)
+        layout.addWidget(self.nav_bar, 0, 0, 1, 4)
+        # Controls row
+        layout.addWidget(self.filter_dropdown, 1, 0)
+        layout.addWidget(self.confirm_toggle,  1, 1)
+        layout.addWidget(self.search_box,      1, 3)
+        # Content splitter
+        layout.addWidget(content_splitter, 2, 0, 1, 4)
+        # Bottom bar
+        layout.addWidget(bottom_bar, 3, 0, 1, 4)
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
@@ -528,7 +553,7 @@ class ImageLoader(QMainWindow):
         yoloBoxes = [x1,y1,x2,y2]
         self.deletion_bounding_box_cords.append(yoloBoxes)
         # Redraw bounding box
-        self.update_display(creation=True,creationBoxes=self.creation_boxes)
+        self.update_display(creation=True)
 
     def get_verified_label_path(self, source_path):
         """Map source image path to its verified dataset label txt file."""
@@ -690,7 +715,7 @@ class ImageLoader(QMainWindow):
             combo.insertItem(0, self.last_verified_label)
             combo.setCurrentIndex(0)
 
-    def update_display(self, yoloBoxes=None, selection=False,creation=False,creationBoxes=None):
+    def update_display(self, yoloBoxes=None, selection=False, creation=False):
         # Centralized logic to refresh the image label
         if not self.filtered_images:
             return
@@ -748,12 +773,14 @@ class ImageLoader(QMainWindow):
             thickness = 4
             cv2.rectangle(image, (yoloBoxes[0], yoloBoxes[1]), (yoloBoxes[2], yoloBoxes[3]), color, thickness) #type: ignore
 
-        if creation:
-            color = (0, 255, 0) # Blue color (BGR format)
+        if self.creation_boxes:
+            color = (0, 255, 0)
             thickness = 5
-            for box in creationBoxes: #type: ignore
+            for box in self.creation_boxes:
                 x1, y1, x2, y2 = box
                 cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+
+        if creation:
             self.refresh_labels_ui()
 
 
@@ -767,10 +794,10 @@ class ImageLoader(QMainWindow):
         pil_image = Image.fromarray(color_correction)
         pixmap = QPixmap.fromImage(pil_image.toqimage())
         scaled_pixmap = pixmap.scaled(
-            1000,
-            700,
+            self.image_label.width(),
+            self.image_label.height(),
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.FastTransformation,
+            Qt.TransformationMode.SmoothTransformation,
         )
         self.display_width = scaled_pixmap.width()
         self.display_height = scaled_pixmap.height()
@@ -1036,8 +1063,11 @@ class ImageLoader(QMainWindow):
             btn.deleteLater()
         self.species_buttons.clear()
 
+        # Drop any previously selected species that are now inactive
+        self.species_filter &= set(self.active_labels)
+
         cols = 5
-        for i, label in enumerate(self.labels):
+        for i, label in enumerate(self.active_labels):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.blockSignals(True)
@@ -1172,7 +1202,7 @@ class ImageLoader(QMainWindow):
             self.creation_boxes.append([x_min, y_min, x_max, y_max])
             self.temp_point = None
 
-            self.update_display(creation=True, creationBoxes=self.creation_boxes)
+            self.update_display(creation=True, )
 
     def map_to_image_coordinates(self, click_x, click_y):
         """
