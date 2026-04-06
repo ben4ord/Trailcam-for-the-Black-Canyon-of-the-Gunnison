@@ -46,6 +46,7 @@ class TrainingConfig:
             workers=0,
             project="Models",
             name="experiment1",
+            resume=False,
         )
 
     @classmethod
@@ -61,6 +62,7 @@ class TrainingConfig:
             workers=0,
             project="Models",
             name="experiment1",
+            resume=False,
         )
 
     @classmethod
@@ -76,4 +78,5 @@ class TrainingConfig:
             workers=0,
             project="Models",
             name="experiment1",
+            resume=False,
         )

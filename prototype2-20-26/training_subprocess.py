@@ -350,7 +350,12 @@ def resolve_device(config_device):
 
 
 def _checkpoint_is_resumable(path: str):
-    """Check whether Ultralytics checkpoint has a non-negative epoch for resuming."""
+    """Check whether Ultralytics checkpoint has a non-negative epoch for resuming.
+
+    Returns (resumable, last_epoch, target_epochs) where target_epochs is read
+    from the checkpoint's own train_args so the comparison uses the original run's
+    epoch target rather than whatever the GUI config says.
+    """
     try:
         model, ckpt = load_checkpoint(path)
         epoch = int(ckpt.get("epoch", -1))
@@ -365,10 +370,20 @@ def _checkpoint_is_resumable(path: str):
                 import torch
                 torch.save({"model": model, **ckpt}, path)
                 emit("debug", text=f"Debug: corrected checkpoint epoch from -1 to {epoch} at {path}")
-        return epoch >= 0, epoch
+
+        # Read the target epoch count from the checkpoint's own training args.
+        target_epochs = None
+        train_args = ckpt.get("train_args", None)
+        if train_args is not None:
+            try:
+                target_epochs = int(getattr(train_args, "epochs", None) or train_args.get("epochs", None))
+            except Exception:
+                pass
+
+        return epoch >= 0, epoch, target_epochs
     except Exception as exc:
         emit("debug", text=f"Debug: failed to inspect checkpoint for resume at {path}: {exc}")
-        return False, None
+        return False, None, None
 
 class StreamParser:
     def __init__(self, epochs: int):
@@ -537,6 +552,34 @@ class ProgressTracker:
             status = f"Validating epoch {current_epoch}/{total_epochs}..."
         emit("progress", progress=0, status=status)
 
+    def on_val_batch_progress(self, validator) -> None:
+        """Emit per-batch validation progress from the validator object."""
+        batch_i = int(getattr(validator, "batch_i", -1))
+        if batch_i < 0:
+            return
+        try:
+            total_batches = len(validator.dataloader)
+        except Exception:
+            return
+        if total_batches <= 0:
+            return
+
+        total_epochs = self.configured_epochs
+        current_epoch = max(1, min(self.current_epoch, total_epochs))
+        done = batch_i + 1
+        pct = done / total_batches * 100
+
+        elapsed = max(0.001, time.time() - self.val_started_at) if self.val_started_at > 0 else 0.001
+        rate = done / elapsed
+        eta_secs = (total_batches - done) / rate if rate > 0 else 0.0
+        eta_text = self.format_eta(eta_secs)
+
+        emit(
+            "progress",
+            progress=0,
+            status=f"Validating epoch {current_epoch}/{total_epochs}: batch {done}/{total_batches} ({pct:.0f}%) | ETA {eta_text}",
+        )
+
     def on_val_end(self):
         """Emit validation completion and update rolling validation timings."""
         total_epochs = self.configured_epochs
@@ -674,6 +717,10 @@ def main() -> int:
                     trainer.stop = True
                     emit("progress", progress=0, status="Stopping training...")
 
+            def on_val_batch_end(validator):
+                # validator object is passed here (not trainer) — pull batch_i from it.
+                progress_tracker.on_val_batch_progress(validator)
+
             def on_val_end(trainer):
                 progress_tracker.on_val_end()
                 if stop_requested(stop_file):
@@ -688,6 +735,7 @@ def main() -> int:
             model.add_callback("on_train_batch_start", on_train_batch_end)
             model.add_callback("on_train_epoch_end", on_train_epoch_end)
             model.add_callback("on_val_start", on_val_start)
+            model.add_callback("on_val_batch_end", on_val_batch_end)
             model.add_callback("on_val_end", on_val_end)
 
             device = resolve_device(config.device)
@@ -701,15 +749,19 @@ def main() -> int:
                 emit("debug", text=f"Debug: resume=True, resuming from {config.model}")
 
                 if model_path and Path(model_path).exists():
-                    # Check if resumable and not completed
-                    resumable, ckpt_epoch = _checkpoint_is_resumable(model_path)
-                    if resumable and ckpt_epoch >= config.epochs:
+                    # Check if resumable and not completed.
+                    # Use the checkpoint's own target epochs so the comparison is accurate
+                    # regardless of what the GUI's config says.
+                    resumable, ckpt_epoch, ckpt_target_epochs = _checkpoint_is_resumable(model_path)
+                    effective_epochs = ckpt_target_epochs if ckpt_target_epochs is not None else config.epochs
+                    emit("debug", text=f"Debug: checkpoint epoch={ckpt_epoch}, target={effective_epochs}")
+                    if resumable and ckpt_epoch >= effective_epochs:
                         resume_arg = False
-                        emit("log", text=f"Checkpoint has already completed {ckpt_epoch} epochs (target: {config.epochs}). Starting fresh training from weights.")
+                        emit("log", text=f"Checkpoint has already completed {ckpt_epoch} epochs (target: {effective_epochs}). Starting fresh training from weights.")
                         emit("debug", text=f"Debug: checkpoint already finished, using as pretrained weights")
-                    elif resumable and ckpt_epoch < config.epochs:
+                    elif resumable and ckpt_epoch < effective_epochs:
                         resume_arg = model_path
-                        emit("debug", text=f"Debug: training will resume from checkpoint {resume_arg} (epoch {ckpt_epoch})")
+                        emit("debug", text=f"Debug: training will resume from checkpoint {resume_arg} (epoch {ckpt_epoch}/{effective_epochs})")
                     else:
                         resume_arg = model_path  # Try anyway, fallback will handle
                         emit("debug", text=f"Debug: attempting resume from checkpoint {resume_arg} (epoch {ckpt_epoch}), will fallback if fails")

@@ -47,7 +47,7 @@ class TrainModel(QMainWindow):
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
             home=True,
-            update_labels=False,
+            update_labels=True,
             new_folder=False,
         )
         self.nav_bar.homeClicked.connect(self.menu_window)
@@ -221,18 +221,25 @@ class TrainModel(QMainWindow):
         return model_path
     
     def resume_training(self):
-        """Resume the last training run based on selection"""
+        """Resume the last training run based on selection.
+
+        The intensity selector is intentionally ignored here — Ultralytics reads
+        batch size, imgsz, and epochs directly from the checkpoint's saved train_args,
+        so whatever the GUI config says has no effect on a true resume.
+        """
         selected_model = self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt"
         last_model = self.get_corresponding_last_pt(selected_model)
 
-        
         if not confirm_action(
             self,
             "Resume Training",
-            f"Are you sure you want to resume training {last_model}?",
+            f"Are you sure you want to resume training {last_model}?\n\n"
+            "Training will continue using the settings saved in the checkpoint.",
         ):
             return
-        
+
+        # Only model, device, and run name matter here — Ultralytics overwrites
+        # everything else (epochs, batch, imgsz) from the checkpoint's own train_args.
         config = TrainingConfig(model=last_model, device=self.get_device())
         config.resume = True
         run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
