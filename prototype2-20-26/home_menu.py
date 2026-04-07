@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from batch_selection_window import BatchWindow
 from nav_bar import NavBar
 from train_model import TrainModel
+from export_data_window import ExportWindow
 from window_utils import center_on_primary_screen
 
 class MenuWindow(QMainWindow):
@@ -48,6 +49,11 @@ class MenuWindow(QMainWindow):
         self.trainModel.clicked.connect(self.train_model_window)
         layout.addWidget(self.trainModel, 2, 0, 2, 6)
 
+        # Export CSV with population data
+        self.exportData = QPushButton('Export Data')
+        self.exportData.clicked.connect(self.export_animal_data)
+        layout.addWidget(self.exportData, 3, 0, 2, 6)
+
         center_on_primary_screen(self)
         self.show()
 
@@ -59,6 +65,11 @@ class MenuWindow(QMainWindow):
 
     def train_model_window(self):
         self.imageWindow = TrainModel(self.drive)
+        self.imageWindow.show()
+        self.close()
+    
+    def export_animal_data(self):
+        self.imageWindow = ExportWindow(self.drive)
         self.imageWindow.show()
         self.close()
 
