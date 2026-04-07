@@ -60,13 +60,14 @@ class BatchPrediction(QMainWindow):
         # Images with classification under model_threshold
         # will be put in the model_discarded
 
-        self.model_threshold = confidence_value # Allow users to change
+        self.model_threshold = confidence_value/100 # Allow users to change
         self.model_discarded = []
         self.model_verified = []
         #load window first then start processing 
         QTimer.singleShot(0, self.start_processing)
-
-
+        print(confidence_value)
+        print("This is model_threshold")
+        print(self.model_threshold)
 
     def start_processing(self):
         self.scan_folders_walk(self.drive)
