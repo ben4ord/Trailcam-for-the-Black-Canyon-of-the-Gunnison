@@ -70,7 +70,7 @@ def main() -> None:
     parser.add_argument(
         "--labels-dir",
         type=Path,
-        default=Path.cwd() / "verified_images" / "dataset" / "labels",
+        default=Path.cwd() / "verified_images_less_people" / "dataset" / "labels",
         help="Directory containing YOLO .txt label files.",
     )
     parser.add_argument(
