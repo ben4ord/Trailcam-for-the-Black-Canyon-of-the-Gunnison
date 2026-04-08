@@ -109,13 +109,13 @@ def main() -> None:
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path.cwd() / "verified_images" / "dataset",
+        default=Path.cwd() / "verified_images_less_people" / "dataset",
         help="Source dataset root containing images/ and labels/.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path.cwd() / "verified_images" / "dataset_filtered",
+        default=Path.cwd() / "verified_images_less_people" / "dataset_filtered",
         help="Output dataset root for filtered labels.",
     )
     parser.add_argument(

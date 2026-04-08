@@ -16,7 +16,7 @@ class TrainingManager:
         # This is for the executable to work properly
         base_dir = Path.cwd()
 
-        self.train_root = base_dir / "verified_images" / "dataset"
+        self.train_root = base_dir / "verified_images_less_people" / "dataset"
 
         self.images_dir = self.train_root / "images"
         self.labels_dir = self.train_root / "labels"
