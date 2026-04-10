@@ -225,7 +225,7 @@ class TrainModel(QMainWindow):
         
         config = TrainingConfig(model=last_model, device=self.get_device())
         config.resume = True
-        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
         config.name = os.path.basename(run_name)
         ok, message = self.session.start(self.drive, config)
         if not ok:
@@ -250,7 +250,7 @@ class TrainModel(QMainWindow):
             return
 
         config = TrainingConfig(model=self.model_combo.currentData() if self.model_combo.currentData() else "yolov8s.pt", device=self.get_device())
-        config.name = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+        config.name = datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
         ok, message = self.session.start(self.drive, config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
