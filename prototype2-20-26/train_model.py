@@ -273,6 +273,7 @@ class TrainModel(QMainWindow):
             "large": TrainingConfig.large,
         }
         training_config = config_builders[config_key]()
+        training_config.device = self.get_device()
         ok, message = self.session.start(self.drive, training_config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
