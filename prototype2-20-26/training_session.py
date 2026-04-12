@@ -110,6 +110,7 @@ class TrainingSession:
             self.stop_file.touch(exist_ok=True)
             self.status = "Stopping training (this may take a while)..."
             self.append_debug_locked("Debug: abort requested from UI.")
+            self.write_boot_state_locked()
 
     def force_kill(self) -> bool:
         # Hard-stop subprocess when graceful stop does not finish in time.
@@ -117,6 +118,8 @@ class TrainingSession:
             self.refresh_from_disk_locked()
             if not self.running or not self.pid:
                 return False
+
+            pid = self.pid
 
             # Try to preserve best.pt before process termination.
             self.recover_partial_best_locked()
@@ -127,15 +130,30 @@ class TrainingSession:
                 if os.name == "nt":
                     # Kill the task forcefully based on the PID of the task
                     subprocess.run(
-                        ["taskkill", "/PID", str(self.pid), "/T", "/F"],
+                        ["taskkill", "/PID", str(pid), "/T", "/F"],
                         check=False,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
                 else:
-                    os.kill(self.pid, signal.SIGKILL)
+                    # The subprocess is launched in a fresh session, so kill the
+                    # whole process group in case training spawned helpers.
+                    os.killpg(pid, signal.SIGKILL)
             except Exception:
                 return False
+
+            # Do not wait for later PID polling on mac: a force-stop should
+            # immediately transition the shared state out of "running".
+            self.running = False
+            self.progress = 0
+            self.status = "Training aborted"
+            self.was_aborted = True
+            self.had_error = False
+            self.pid = None
+            self.completion_counter += 1
+            self.append_log_locked("Training was force-stopped after graceful shutdown timed out.")
+            self.stop_file.unlink(missing_ok=True)
+            self.write_boot_state_locked()
             return True
 
     # Grab the snapshot for the latest run
