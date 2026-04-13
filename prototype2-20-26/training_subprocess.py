@@ -18,6 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ultralytics import YOLO
+from ultralytics.nn.tasks import load_checkpoint
 
 from app_paths import app_base_dir
 from training_config import TrainingConfig
@@ -81,6 +82,13 @@ class EventWriter:
         # Atomic-ish replace prevents partially written JSON if process dies.
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
+        # On Windows the GUI may hold a brief read lock; retry a few times before giving up.
+        for _ in range(10):
+            try:
+                tmp.replace(self.state_path)
+                return
+            except PermissionError:
+                time.sleep(0.01)
         tmp.replace(self.state_path)
 
 
@@ -112,6 +120,215 @@ def clear_cuda_memory() -> None:
     gc.collect()
 
 
+def read_lines(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def resolve_inactive_ids(inactive_lines: list[str], classes: list[str]) -> set[int]:
+    inactive_ids: set[int] = set()
+    for token in inactive_lines:
+        try:
+            class_id = int(token)
+            if 0 <= class_id < len(classes):
+                inactive_ids.add(class_id)
+            continue
+        except ValueError:
+            pass
+
+        if token in classes:
+            inactive_ids.add(classes.index(token))
+    return inactive_ids
+
+
+def format_path(path: Path, base_dir: Path) -> str:
+    try:
+        rel = path.relative_to(base_dir)
+        return rel.as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def link_or_copy(src: Path, dst: Path, force_copy: bool) -> None:
+    if dst.exists():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if force_copy:
+        shutil.copy2(src, dst)
+        return
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
+def write_filtered_yaml(
+    base_yaml: Path,
+    output_yaml: Path,
+    output_root: Path,
+    classes: list[str],
+    base_dir: Path,
+) -> None:
+    if base_yaml.exists():
+        lines = base_yaml.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = []
+
+    output_path = format_path(output_root, base_dir)
+
+    replaced_path = False
+    for idx, line in enumerate(lines):
+        if line.startswith("path:"):
+            lines[idx] = f"path: {output_path}"
+            replaced_path = True
+            break
+    if not replaced_path:
+        lines.insert(0, f"path: {output_path}")
+
+    replaced_nc = False
+    for idx, line in enumerate(lines):
+        if line.startswith("nc:"):
+            lines[idx] = f"nc: {len(classes)}"
+            replaced_nc = True
+            break
+    if not replaced_nc:
+        lines.append(f"nc: {len(classes)}")
+
+    names_index = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "names:":
+            names_index = idx
+            break
+
+    name_lines = [f"  {idx}: {name}" for idx, name in enumerate(classes)]
+
+    if names_index is None:
+        lines.append("")
+        lines.append("names:")
+        lines.extend(name_lines)
+    else:
+        block_start = names_index + 1
+        block_end = block_start
+        while block_end < len(lines) and lines[block_end].startswith("  "):
+            block_end += 1
+        lines = lines[:block_start] + name_lines + lines[block_end:]
+
+    output_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
+    inactive_path = base_dir / "inactive_labels.txt"
+    inactive_lines = read_lines(inactive_path)
+    if not inactive_lines:
+        return None
+
+    classes = read_lines(base_dir / "classes.txt")
+    inactive_ids = resolve_inactive_ids(inactive_lines, classes)
+    if not inactive_ids:
+        emit("debug", text="Debug: inactive_labels.txt had no resolvable class IDs.")
+        return None
+
+    source_root = base_dir / "verified_images" / "dataset"
+    images_dir = source_root / "images"
+    labels_dir = source_root / "labels"
+
+    if not images_dir.exists():
+        raise FileNotFoundError(f"Images dir not found: {images_dir}")
+    if not labels_dir.exists():
+        raise FileNotFoundError(f"Labels dir not found: {labels_dir}")
+
+    output_root = base_dir / "verified_images" / "dataset_filtered"
+    if output_root.exists():
+        shutil.rmtree(output_root)
+
+    output_images = output_root / "images"
+    output_labels = output_root / "labels"
+    output_images.mkdir(parents=True, exist_ok=True)
+    output_labels.mkdir(parents=True, exist_ok=True)
+
+    label_files = [p for p in labels_dir.rglob("*.txt") if p.is_file()]
+    total_labels = len(label_files)
+    start_time = time.time()
+
+    def emit_progress(kind: str, current: int, total: int) -> None:
+        if total <= 0:
+            return
+        elapsed = max(0.001, time.time() - start_time)
+        rate = current / elapsed if current else 0.0
+        eta = (total - current) / rate if rate > 0 else 0.0
+        emit(
+            "progress",
+            progress=0,
+            status=f"Preparing dataset: {kind} {current}/{total} | ETA {eta:.1f}s",
+        )
+
+    emit("progress", progress=0, status="Preparing dataset: filtering labels...")
+    image_candidates: list[Path] = []
+    image_exts = [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"]
+
+    for idx, label_path in enumerate(label_files, start=1):
+        rel = label_path.relative_to(labels_dir)
+        dest = output_labels / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        kept: list[str] = []
+        for raw in label_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            parts = line.split()
+            try:
+                class_id = int(parts[0])
+            except ValueError:
+                continue
+            if class_id in inactive_ids:
+                continue
+            kept.append(line)
+
+        if kept:
+            dest.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            image_dir = images_dir / rel.parent
+            image_path = None
+            for ext in image_exts:
+                candidate = image_dir / f"{label_path.stem}{ext}"
+                if candidate.exists():
+                    image_path = candidate
+                    break
+            if image_path is None:
+                matches = list(image_dir.glob(f"{label_path.stem}.*"))
+                if matches:
+                    image_path = matches[0]
+            if image_path is not None:
+                image_candidates.append(image_path)
+            else:
+                emit("debug", text=f"Debug: no image found for label {rel.as_posix()}")
+
+        if idx == total_labels or idx % 200 == 0:
+            emit_progress("labels", idx, total_labels)
+
+    emit("progress", progress=0, status="Preparing dataset: copying images...")
+    # De-duplicate paths in case of multiple label files pointing to same image.
+    unique_images = list(dict.fromkeys(image_candidates))
+    total_images = len(unique_images)
+    for idx, image_path in enumerate(unique_images, start=1):
+        rel = image_path.relative_to(images_dir)
+        dest = output_images / rel
+        link_or_copy(image_path, dest, force_copy=False)
+        if idx == total_images or idx % 200 == 0:
+            emit_progress("images", idx, total_images)
+
+    output_yaml = output_root / "data.yaml"
+    write_filtered_yaml(base_yaml, output_yaml, output_root, classes, base_dir)
+    emit("debug", text=f"Debug: filtered dataset ready at {output_root}")
+    emit("debug", text=f"Debug: inactive class IDs: {sorted(inactive_ids)}")
+    return output_yaml
+
+
 def resolve_device(config_device):
     """Resolve training device using config override, env var, then auto-detect."""
     if config_device is not None:
@@ -132,35 +349,41 @@ def resolve_device(config_device):
     return "cpu"
 
 
-# This grabs the next folder for storing information from the training run
-def next_experiment_name(project_path: Path, requested_name: str) -> str:
-    """Generate non-colliding run names (experiment1, experiment2, ...)."""
-    name = (requested_name or "").strip() or "experiment1"
-    project_path.mkdir(parents=True, exist_ok=True)
+def _checkpoint_is_resumable(path: str):
+    """Check whether Ultralytics checkpoint has a non-negative epoch for resuming.
 
-    requested_path = project_path / name
-    if not requested_path.exists():
-        return name
+    Returns (resumable, last_epoch, target_epochs) where target_epochs is read
+    from the checkpoint's own train_args so the comparison uses the original run's
+    epoch target rather than whatever the GUI config says.
+    """
+    try:
+        model, ckpt = load_checkpoint(path)
+        epoch = int(ckpt.get("epoch", -1))
+        if epoch < 0:
+            # If epoch is -1, check train_results for actual last epoch
+            train_results = ckpt.get("train_results", {})
+            if "epoch" in train_results and train_results["epoch"]:
+                epoch = int(train_results["epoch"][-1])
+                # Update the checkpoint with correct epoch
+                ckpt["epoch"] = epoch
+                # Save the corrected checkpoint
+                import torch
+                torch.save({"model": model, **ckpt}, path)
+                emit("debug", text=f"Debug: corrected checkpoint epoch from -1 to {epoch} at {path}")
 
-    match = re.fullmatch(r"^(.*?)(\d+)$", name)
-    if match:
-        prefix = match.group(1)
-        start_index = int(match.group(2))
-    else:
-        prefix = name
-        start_index = 1
+        # Read the target epoch count from the checkpoint's own training args.
+        target_epochs = None
+        train_args = ckpt.get("train_args", None)
+        if train_args is not None:
+            try:
+                target_epochs = int(getattr(train_args, "epochs", None) or train_args.get("epochs", None))
+            except Exception:
+                pass
 
-    max_index = start_index
-    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-    for child in project_path.iterdir():
-        if not child.is_dir():
-            continue
-        folder_match = pattern.fullmatch(child.name)
-        if folder_match:
-            max_index = max(max_index, int(folder_match.group(1)))
-
-    return f"{prefix}{max_index + 1}"
-
+        return epoch >= 0, epoch, target_epochs
+    except Exception as exc:
+        emit("debug", text=f"Debug: failed to inspect checkpoint for resume at {path}: {exc}")
+        return False, None, None
 
 class StreamParser:
     def __init__(self, epochs: int):
@@ -329,6 +552,34 @@ class ProgressTracker:
             status = f"Validating epoch {current_epoch}/{total_epochs}..."
         emit("progress", progress=0, status=status)
 
+    def on_val_batch_progress(self, validator) -> None:
+        """Emit per-batch validation progress from the validator object."""
+        batch_i = int(getattr(validator, "batch_i", -1))
+        if batch_i < 0:
+            return
+        try:
+            total_batches = len(validator.dataloader)
+        except Exception:
+            return
+        if total_batches <= 0:
+            return
+
+        total_epochs = self.configured_epochs
+        current_epoch = max(1, min(self.current_epoch, total_epochs))
+        done = batch_i + 1
+        pct = done / total_batches * 100
+
+        elapsed = max(0.001, time.time() - self.val_started_at) if self.val_started_at > 0 else 0.001
+        rate = done / elapsed
+        eta_secs = (total_batches - done) / rate if rate > 0 else 0.0
+        eta_text = self.format_eta(eta_secs)
+
+        emit(
+            "progress",
+            progress=0,
+            status=f"Validating epoch {current_epoch}/{total_epochs}: batch {done}/{total_batches} ({pct:.0f}%) | ETA {eta_text}",
+        )
+
     def on_val_end(self):
         """Emit validation completion and update rolling validation timings."""
         total_epochs = self.configured_epochs
@@ -405,12 +656,15 @@ def main() -> int:
                     f"Could not find data.yaml in {Path(args.drive)} or {base_dir}"
                 )
 
+        filtered_yaml = prepare_filtered_dataset(base_dir, data_path)
+        if filtered_yaml is not None:
+            data_path = filtered_yaml
+
         project_path = Path(config.project)
         if not project_path.is_absolute():
             project_path = (base_dir / project_path).resolve()
 
-        # Avoid clobbering prior runs with same user-requested name.
-        run_name = next_experiment_name(project_path, config.name)
+        run_name = config.name
         run_dir = (project_path / run_name).resolve()
         emit("run_dir", path=str(run_dir))
 
@@ -418,9 +672,22 @@ def main() -> int:
         progress_tracker = ProgressTracker(config.epochs)
         emit("progress", progress=0, status="Loading YOLO model...")
 
+        # Resolve model path: if relative, try Models/ first (for checkpoints), then base_dir.
+        model_path = config.model
+        if model_path and not Path(model_path).is_absolute():
+            # First check if it's a checkpoint in Models/ (e.g., "experiment6/weights/best.pt")
+            models_check = (project_path / model_path).resolve()
+            if models_check.exists():
+                model_path = str(models_check)
+                print(f"Resolved model path from project directory: {model_path}")
+            else:
+                # Fall back to resolving from base_dir (for base models like "yolov8s.pt")
+                model_path = str((base_dir / model_path).resolve())
+                print(f"Resolved model path from base directory: {model_path}")
+
         # Route Ultralytics stdout/stderr through parser so UI can show key stages.
         with redirect_stdout(parser_stream), redirect_stderr(parser_stream):  # type: ignore
-            model = YOLO(config.model)
+            model = YOLO(model_path)
 
             def on_train_start(trainer):
                 # First callback confirms trainer loop is active.
@@ -450,6 +717,10 @@ def main() -> int:
                     trainer.stop = True
                     emit("progress", progress=0, status="Stopping training...")
 
+            def on_val_batch_end(validator):
+                # validator object is passed here (not trainer) — pull batch_i from it.
+                progress_tracker.on_val_batch_progress(validator)
+
             def on_val_end(trainer):
                 progress_tracker.on_val_end()
                 if stop_requested(stop_file):
@@ -464,6 +735,7 @@ def main() -> int:
             model.add_callback("on_train_batch_start", on_train_batch_end)
             model.add_callback("on_train_epoch_end", on_train_epoch_end)
             model.add_callback("on_val_start", on_val_start)
+            model.add_callback("on_val_batch_end", on_val_batch_end)
             model.add_callback("on_val_end", on_val_end)
 
             device = resolve_device(config.device)
@@ -471,19 +743,68 @@ def main() -> int:
             emit("progress", progress=0, status="Building training data...")
 
             # YOLO handles dataloader build + training loop + validation internally.
-            results = model.train(
-                data=str(data_path),
-                epochs=config.epochs,
-                imgsz=config.imgsz,
-                batch=config.batch,
-                device=device,
-                patience=config.patience,
-                workers=config.workers,
-                project=str(project_path),
-                name=run_name,
-                exist_ok=True,
-                verbose=True,
-            )
+
+            resume_arg = None
+            if config.resume:
+                emit("debug", text=f"Debug: resume=True, resuming from {config.model}")
+
+                if model_path and Path(model_path).exists():
+                    # Check if resumable and not completed.
+                    # Use the checkpoint's own target epochs so the comparison is accurate
+                    # regardless of what the GUI's config says.
+                    resumable, ckpt_epoch, ckpt_target_epochs = _checkpoint_is_resumable(model_path)
+                    effective_epochs = ckpt_target_epochs if ckpt_target_epochs is not None else config.epochs
+                    emit("debug", text=f"Debug: checkpoint epoch={ckpt_epoch}, target={effective_epochs}")
+                    if resumable and ckpt_epoch >= effective_epochs:
+                        resume_arg = False
+                        emit("log", text=f"Checkpoint has already completed {ckpt_epoch} epochs (target: {effective_epochs}). Starting fresh training from weights.")
+                        emit("debug", text=f"Debug: checkpoint already finished, using as pretrained weights")
+                    elif resumable and ckpt_epoch < effective_epochs:
+                        resume_arg = model_path
+                        emit("debug", text=f"Debug: training will resume from checkpoint {resume_arg} (epoch {ckpt_epoch}/{effective_epochs})")
+                    else:
+                        resume_arg = model_path  # Try anyway, fallback will handle
+                        emit("debug", text=f"Debug: attempting resume from checkpoint {resume_arg} (epoch {ckpt_epoch}), will fallback if fails")
+                else:
+                    resume_arg = False
+                    emit("log", text=f"Resume path {model_path} not found. Starting fresh training.")
+                    emit("debug", text=f"Debug: resume requested but path does not exist: {model_path}")
+
+            try:
+                results = model.train(
+                    data=str(data_path),
+                    epochs=config.epochs,
+                    imgsz=config.imgsz,
+                    batch=config.batch,
+                    device=device,
+                    patience=config.patience,
+                    workers=config.workers,
+                    project=str(project_path),
+                    name=run_name,
+                    exist_ok=True,
+                    verbose=True,
+                    resume=resume_arg,
+                )
+            except AssertionError as e:
+                if "nothing to resume" in str(e) and resume_arg:
+                    emit("log", text=f"Resume failed: {e}. Falling back to fresh training from weights.")
+                    emit("debug", text=f"Debug: resume assertion failed, retrying with resume=False")
+                    results = model.train(
+                        data=str(data_path),
+                        epochs=config.epochs,
+                        imgsz=config.imgsz,
+                        batch=config.batch,
+                        device=device,
+                        patience=config.patience,
+                        workers=config.workers,
+                        project=str(project_path),
+                        name=run_name,
+                        exist_ok=True,
+                        verbose=True,
+                        resume=False,  # Fallback to fresh training
+                    )
+                else:
+                    raise
             parser_stream.flush()
 
         # save_dir can vary by Ultralytics version; fallback to planned run_dir.
