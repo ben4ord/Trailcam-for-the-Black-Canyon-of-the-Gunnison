@@ -1,9 +1,10 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QSlider,QLabel
+from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QSlider,QLabel,QComboBox
 from PySide6.QtCore import Qt
 
 from image_viewer import ImageLoader
 from nav_bar import NavBar
-from batch_prediction import BatchPrediction
+from data_extraction import DataExtraction
+from datetime import datetime, timedelta
 from window_utils import center_on_primary_screen
 
 class ExportWindow(QMainWindow):
@@ -40,16 +41,23 @@ class ExportWindow(QMainWindow):
         layout.setColumnStretch(4, 1)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setLayout(layout)
-        
-        # Add button to next window
-        self.viewImages = QPushButton('View Images')
-        self.viewImages.clicked.connect(self.view_image_window)
-        layout.addWidget(self.viewImages, 3, 0,1,3)
+
+        # Select time interval between photos 
+        self.time_selection = QComboBox()
+        self.time_selection.addItem("30 Seconds",userData=timedelta(seconds=30))
+        self.time_selection.addItem("1 Minute",userData=timedelta(minutes=1))
+        self.time_selection.addItem("3 Minutes",userData=timedelta(minutes=3))
+        self.time_selection.addItem("5 Minutes",userData=timedelta(minutes=5))
+        self.time_selection.addItem("10 Minutes",userData=timedelta(minutes=10))
+        self.time_selection.addItem("15 Minutes",userData=timedelta(minutes=15))
+        self.time_selection.addItem("30 Minutes",userData=timedelta(minutes=30))
+        self.time_selection.addItem("1 Hour",userData=timedelta(hours=1))
+        layout.addWidget(self.time_selection, 2, 2,1,2)
 
         # Add button for training new model
-        self.trainModel = QPushButton('Batch Training')
-        self.trainModel.clicked.connect(self.start_batch_prediction)
-        layout.addWidget(self.trainModel, 3, 4,1,3)
+        self.exportData = QPushButton('Export Data')
+        self.exportData.clicked.connect(self.start_data_extraction)
+        layout.addWidget(self.exportData, 3, 2,1,2)
 
         # Add slider to adjust model thresh hold 
         self.thresh_hold_slider = QSlider(Qt.Orientation.Horizontal)
@@ -59,8 +67,8 @@ class ExportWindow(QMainWindow):
         # Connect signal to slot
         self.thresh_hold_slider.valueChanged.connect(self.update_confidence)
         self.thresh_hold_slider.setValue(0)
-        layout.addWidget(self.thresh_hold_slider,5,4,1,2)
-        layout.addWidget(self.thresh_num,4,4,1,1)
+        layout.addWidget(self.thresh_hold_slider,5,2,1,2)
+        layout.addWidget(self.thresh_num,4,2,1,1)
         center_on_primary_screen(self)
         self.show()
 
@@ -68,13 +76,9 @@ class ExportWindow(QMainWindow):
         self.confidence_value = value
         self.thresh_num.setText(f"Confidence Value: {value}")
 
-    def view_image_window(self):
-        self.imageWindow = ImageLoader(self.drive)
-        self.imageWindow.show()
-        self.close()
-
-    def start_batch_prediction(self):
-        self.predictionWindow = BatchPrediction(self.drive,confidence_value=self.confidence_value)
+    def start_data_extraction(self):
+        self.image_time_period = self.time_selection.currentData()
+        self.predictionWindow = DataExtraction(self.drive,confidence_value=self.confidence_value,image_time_period=self.image_time_period)
         self.predictionWindow.show()
         self.close()
     

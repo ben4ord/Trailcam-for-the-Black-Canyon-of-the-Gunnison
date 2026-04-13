@@ -1,10 +1,14 @@
 """Prediction helpers wrapping Ultralytics YOLO outputs for the GUI layer."""
 
+from turtle import pd
 from typing import Optional
 from ultralytics import YOLO
 from pathlib import Path
 import numpy as np
 import cv2
+import exifread
+from datetime import datetime
+
 
 class ImageLabeler:
     def __init__(self):
@@ -81,6 +85,53 @@ class ImageLabeler:
 
             return {
                 "class_ids": r.boxes.cls.tolist(),
+                "confidences": r.boxes.conf.tolist(),
+                "bbox_xyxy": r.boxes.xyxy.tolist(),
+                "bbox_xywhn": r.boxes.xywhn.tolist(),
+                "image_path": image_path
+            }
+        else:
+            return None
+
+    # Need to get date time for animal population statistics and to filter out images based on time intervals between detections.
+    def get_date_time(self,image_path):
+        try:
+            with open(image_path, 'rb') as f:
+                tags = exifread.process_file(
+                    f,
+                    stop_tag="EXIF DateTimeOriginal",
+                    details=False
+                )
+                dt = tags.get("EXIF DateTimeOriginal")
+                if dt:
+                    dt_obj = datetime.strptime(str(dt), "%Y:%m:%d %H:%M:%S")
+
+                    time_obj = dt_obj.time()
+                    date_obj = dt_obj.date()
+
+                    return dt_obj,date_obj, time_obj
+                
+        except Exception:
+            pass
+
+        return  None,None, None
+
+    def get_extraction_animal_data(self, image_path):
+        if self.check_image_corruption(image_path):
+            results = self.model(image_path,verbose=False)
+
+            r = results[0]
+
+            if r.boxes is None or len(r.boxes) == 0:
+                return {"Filepath": image_path,
+                        "Site": None,
+                        "Date": None,
+                        "class_ids": [],
+                        "confidences": []}
+
+            return {
+                "Filepath": image_path,
+                "class_ids": r.boxes.cls.int().tolist(),
                 "confidences": r.boxes.conf.tolist(),
                 "bbox_xyxy": r.boxes.xyxy.tolist(),
                 "bbox_xywhn": r.boxes.xywhn.tolist(),
