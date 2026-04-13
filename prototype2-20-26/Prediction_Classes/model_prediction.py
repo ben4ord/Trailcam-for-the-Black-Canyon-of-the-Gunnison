@@ -6,12 +6,13 @@ from pathlib import Path
 import numpy as np
 import cv2
 
+DEFAULT_MODEL = str(Path(__file__).parent.parent / "Models" / "best_3-24-2026.pt")
+
 class ImageLabeler:
-    def __init__(self):
-        # Resolve full model path
-        full_model_path = Path.cwd() /"Models/best_3-24-2026.pt"
+    def __init__(self, model_path: str = ""):
+        resolved = model_path if model_path else DEFAULT_MODEL
         # Model is loaded once so repeated image predictions are fast.
-        self.model = YOLO(full_model_path)
+        self.model = YOLO(resolved)
 
     def predict(self, image_path: str):
         """Run inference and return first result object for a single image path."""

@@ -89,6 +89,7 @@ class ImageLoader(QMainWindow):
         # Model / backend logic
         # -----------------------------
         self.labeler = ImageLabeler()
+        self.active_model_path = ""
         self.training_manager = TrainingManager(self.drive)
 
         # -----------------------------
@@ -130,6 +131,15 @@ class ImageLoader(QMainWindow):
         self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
         self.nav_bar.newBatchClicked.connect(self.start_batch_prediction)
+        self.nav_bar.modelSelected.connect(self.on_model_selected)
+        # Sync the labeler to whatever the navbar already selected during its __init__
+        # (the signal fires before this connection is made, so we apply it manually).
+        # Only update the labeler here — skip refresh_filter since the UI isn't fully
+        # built yet (delete_button etc. don't exist until later in __init__).
+        initial_model = self.nav_bar.selected_model_path()
+        if initial_model:
+            self.active_model_path = initial_model
+            self.labeler = ImageLabeler(initial_model)
 
         # -----------------------------
         # Controls
@@ -1146,6 +1156,12 @@ class ImageLoader(QMainWindow):
             btn.blockSignals(False)
         self.refresh_filter()
     
+    def on_model_selected(self, model_path: str):
+        """Reload the labeler and re-run inference on the current image."""
+        self.active_model_path = model_path
+        self.labeler = ImageLabeler(model_path)
+        self.refresh_filter(keep_current=True)
+
     def start_batch_prediction(self):
         from Prediction_Classes.batch_prediction import BatchPrediction
         confidence_value, ok = QInputDialog.getInt(
@@ -1161,7 +1177,7 @@ class ImageLoader(QMainWindow):
         if not ok:
             return  # user cancelled
 
-        self.predictionWindow = BatchPrediction(self.drive,confidence_value)
+        self.predictionWindow = BatchPrediction(self.drive, confidence_value, model_path=self.active_model_path)
         self.predictionWindow.show()
         self.close()
     
