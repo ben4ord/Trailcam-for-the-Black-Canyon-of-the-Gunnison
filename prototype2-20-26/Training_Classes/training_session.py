@@ -17,8 +17,8 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from app_paths import app_base_dir
-from training_config import TrainingConfig
+from Helper_Classes.app_paths import app_base_dir
+from Training_Classes.training_config import TrainingConfig
 
 
 class TrainingSession:

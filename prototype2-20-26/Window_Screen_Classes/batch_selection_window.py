@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QSlider,QLabel
 from PySide6.QtCore import Qt
 
-from image_viewer import ImageLoader
-from nav_bar import NavBar
-from batch_prediction import BatchPrediction
-from window_utils import center_on_primary_screen
+from Window_Screen_Classes.image_viewer import ImageLoader
+from Helper_Classes.nav_bar import NavBar
+from Prediction_Classes.batch_prediction import BatchPrediction
+from Helper_Classes.window_utils import center_on_primary_screen
 
 class BatchWindow(QMainWindow):
     def __init__(self,drive):
@@ -79,6 +79,6 @@ class BatchWindow(QMainWindow):
         self.close()
     
     def open_dir_dialog(self):
-        from window_utils import pick_directory
+        from Helper_Classes.window_utils import pick_directory
         self.drive = pick_directory(self)
         

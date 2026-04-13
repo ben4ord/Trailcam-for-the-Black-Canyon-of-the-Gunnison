@@ -25,14 +25,14 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
 from PySide6.QtCore import Qt
 import qtawesome as qta
-from model_prediction import ImageLabeler
-from nav_bar import NavBar
-from verified_images_manager import TrainingManager
-from clickable_label import ClickableLabel
-from label_editor import LabelEditor
-from label_store import LabelStore
-from ui_dialogs import confirm_action, show_info, show_no_images_popup
-from window_utils import pick_directory, center_on_primary_screen
+from Prediction_Classes.model_prediction import ImageLabeler
+from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.verified_images_manager import TrainingManager
+from Helper_Classes.clickable_label import ClickableLabel
+from Window_Screen_Classes.label_editor import LabelEditor
+from Helper_Classes.label_store import LabelStore
+from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup
+from Helper_Classes.window_utils import pick_directory, center_on_primary_screen
 import shutil
 
 class ImageLoader(QMainWindow):
@@ -939,7 +939,7 @@ class ImageLoader(QMainWindow):
             self.training_manager = TrainingManager(self.drive)
 
     def menu_window(self):
-        from home_menu import MenuWindow
+        from Window_Screen_Classes.home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
         self.close()
@@ -1146,7 +1146,7 @@ class ImageLoader(QMainWindow):
         self.refresh_filter()
     
     def start_batch_prediction(self):
-        from batch_prediction import BatchPrediction
+        from Prediction_Classes.batch_prediction import BatchPrediction
         confidence_value, ok = QInputDialog.getInt(
             self,
             "Set Confidence Threshold",

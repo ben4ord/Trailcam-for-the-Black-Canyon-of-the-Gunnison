@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
 from PySide6.QtCore import Qt
 
-from batch_selection_window import BatchWindow
-from nav_bar import NavBar
-from train_model import TrainModel
-from window_utils import center_on_primary_screen
+from Window_Screen_Classes.batch_selection_window import BatchWindow
+from Helper_Classes.nav_bar import NavBar
+from Training_Classes.train_model import TrainModel
+from Helper_Classes.window_utils import center_on_primary_screen
 
 class MenuWindow(QMainWindow):
     def __init__(self,drive):
@@ -63,6 +63,6 @@ class MenuWindow(QMainWindow):
         self.close()
 
     def open_dir_dialog(self):
-        from window_utils import pick_directory
+        from Helper_Classes.window_utils import pick_directory
         self.drive = pick_directory(self)
         

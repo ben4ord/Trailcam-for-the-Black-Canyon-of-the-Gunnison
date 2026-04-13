@@ -10,9 +10,9 @@ from PySide6.QtWidgets import (
     QWidget
 )
 from PySide6.QtCore import Qt
-from home_menu import MenuWindow
-from nav_bar import NavBar
-from window_utils import center_on_primary_screen, pick_directory
+from Window_Screen_Classes.home_menu import MenuWindow
+from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import center_on_primary_screen, pick_directory
 from pathlib import Path
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     # Look for training in the background 
     if "--training-subprocess" in sys.argv:
-        from training_subprocess import main as training_subprocess_main
+        from Training_Classes.training_subprocess import main as training_subprocess_main
 
         sys.exit(training_subprocess_main())
 
@@ -145,6 +145,7 @@ if __name__ == '__main__':
             color: #e5e5e5;
             selection-background-color: #0078d4;
             border: 1px solid #555555;
+            font-size: 13px;
         }
 
         /* ── Lists ── */

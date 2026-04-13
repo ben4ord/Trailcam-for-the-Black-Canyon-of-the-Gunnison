@@ -5,7 +5,7 @@ import qtawesome as qta
 def icon(name: str):
     """Return a qtawesome icon forced to white regardless of system theme."""
     return qta.icon(name, color='white')  # type: ignore[call-arg]
-from training_session import get_training_session
+from Training_Classes.training_session import get_training_session
 
 
 class NavBar(QWidget):
@@ -260,7 +260,7 @@ class NavBar(QWidget):
         if self.parent_window.__class__.__name__ == "TrainModel":
             return
 
-        from train_model import TrainModel
+        from Training_Classes.train_model import TrainModel
 
         self.parent_window.trainWindow = TrainModel(drive)
         self.parent_window.trainWindow.show()

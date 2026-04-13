@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QProgressBar,QApplication
 from PySide6.QtCore import Qt,QTimer
 import os
-from nav_bar import NavBar
-from window_utils import center_on_primary_screen
-from model_prediction import ImageLabeler
+from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import center_on_primary_screen
+from Prediction_Classes.model_prediction import ImageLabeler
 
 class BatchPrediction(QMainWindow):
     def __init__(self,drive,confidence_value,in_image_viewer=False):
@@ -124,11 +124,11 @@ class BatchPrediction(QMainWindow):
             path_index +=1 
         
     def open_dir_dialog(self):
-            from window_utils import pick_directory
+            from Helper_Classes.window_utils import pick_directory
             self.drive = pick_directory(self)
     
     def view_image_window(self):
-        from image_viewer import ImageLoader
+        from Window_Screen_Classes.image_viewer import ImageLoader
 
         self.imageWindow = ImageLoader(self.drive,model_verified=self.model_verified,model_discarded=self.model_discarded)
         self.imageWindow.show()

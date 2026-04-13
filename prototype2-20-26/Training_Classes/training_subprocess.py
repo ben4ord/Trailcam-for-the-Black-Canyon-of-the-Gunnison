@@ -20,8 +20,8 @@ from pathlib import Path
 from ultralytics import YOLO
 from ultralytics.nn.tasks import load_checkpoint
 
-from app_paths import app_base_dir
-from training_config import TrainingConfig
+from Helper_Classes.app_paths import app_base_dir
+from Training_Classes.training_config import TrainingConfig
 
 
 class EventWriter:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app_paths import classes_file, data_yaml_file, inactive_labels_file
+from Helper_Classes.app_paths import classes_file, data_yaml_file, inactive_labels_file
 
 
 class LabelStore:

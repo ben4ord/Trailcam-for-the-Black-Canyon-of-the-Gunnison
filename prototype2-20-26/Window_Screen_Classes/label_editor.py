@@ -14,9 +14,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from collapsiblepane import CollapsiblePane
 import qtawesome as qta
-from label_store import LabelStore
-from ui_dialogs import confirm_action
-from nav_bar import NavBar
+from Helper_Classes.label_store import LabelStore
+from Helper_Classes.ui_dialogs import confirm_action
+from Helper_Classes.nav_bar import NavBar
 
 class LabelEditor(QDialog):
     def __init__(self, parent=None):

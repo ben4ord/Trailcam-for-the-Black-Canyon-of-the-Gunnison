@@ -15,13 +15,13 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
-from nav_bar import NavBar
+from Helper_Classes.nav_bar import NavBar
 import torch
 import qtawesome as qta
-from training_config import TrainingConfig
-from training_session import get_training_session
-from ui_dialogs import confirm_action
-from label_store import LabelStore
+from Training_Classes.training_config import TrainingConfig
+from Training_Classes.training_session import get_training_session
+from Helper_Classes.ui_dialogs import confirm_action
+from Helper_Classes.label_store import LabelStore
 import datetime
 
 
@@ -433,13 +433,13 @@ class TrainModel(QMainWindow):
     # Menu window from the nav_bar
     def open_label_editor(self):
         """Open the label editor dialog."""
-        from label_editor import LabelEditor
+        from Window_Screen_Classes.label_editor import LabelEditor
         editor = LabelEditor(self)
         editor.exec()
 
     def menu_window(self):
         """Navigate back to home menu."""
-        from home_menu import MenuWindow
+        from Window_Screen_Classes.home_menu import MenuWindow
 
         self.menuWindow = MenuWindow(self.drive)
         self.menuWindow.show()
