@@ -34,7 +34,10 @@ from Window_Screen_Classes.label_editor import LabelEditor
 from Helper_Classes.label_store import LabelStore
 from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup
 from Helper_Classes.window_utils import pick_directory, center_on_primary_screen
+from Helper_Classes.image_scanner import ImageScanner
 import shutil
+
+LIST_PAGE_SIZE = 500
 
 class ImageLoader(QMainWindow):
     def __init__(self, drive,model_verified=None,model_discarded=None):
@@ -47,8 +50,8 @@ class ImageLoader(QMainWindow):
         # -----------------------------
         # Dataset state
         # -----------------------------
-        self.images = []
-        self.filtered_images = []
+        self.images: list[str] = []
+        self.filtered_images: list[str] = []
         self.labels = []
         self.active_labels = []
         self.drive = drive
@@ -71,9 +74,10 @@ class ImageLoader(QMainWindow):
         self.current_base_bgr: np.ndarray | None = None
         self.current_unverified_bgr: np.ndarray | None = None
         self.current_image_path = None
+        self.scanner: ImageScanner | None = None
+        self.list_page_start = 0
+        self.scan_complete = False
 
-        # Load dataset BEFORE UI filtering
-        self.get_imgs(self.drive, new_dir=True)
         self.load_labels()
         self.current_index = 0
         self.filter_mode = "all"
@@ -247,6 +251,9 @@ class ImageLoader(QMainWindow):
         self.search_box.setPlaceholderText("Search images...")
         self.search_box.setClearButtonEnabled(True)
 
+        self.scan_status_label = QLabel("")
+        self.scan_status_label.setStyleSheet("color: #8fa8c0; font-size: 11px;")
+
         self.delete_button = QPushButton()
         self.delete_button.setIcon(qta.icon('fa6s.trash'))
         self.delete_button.setToolTip("Delete Image")
@@ -334,8 +341,9 @@ class ImageLoader(QMainWindow):
         layout.addWidget(self.nav_bar, 0, 0, 1, 4)
         # Controls row
         layout.addWidget(self.filter_dropdown, 1, 0)
-        layout.addWidget(self.confirm_toggle,  1, 1)
-        layout.addWidget(self.search_box,      1, 3)
+        layout.addWidget(self.confirm_toggle, 1, 1)
+        layout.addWidget(self.scan_status_label, 1, 2)
+        layout.addWidget(self.search_box, 1, 3)
         # Content splitter
         layout.addWidget(content_splitter, 2, 0, 1, 4)
         # Bottom bar
@@ -349,18 +357,12 @@ class ImageLoader(QMainWindow):
         self.populate_species_filter_list()
         self.cache_model_verified_species()
 
-        # Final dataset initialization after widgets exist
-        self.apply_filter("all")
-
         self.total_verified_count = self.count_images_in_dir(self.training_manager.images_dir)
         self.total_removed_count = self.count_images_in_dir(self.recently_deleted_root())
-        self.load_image_list()
         self.update_verification_summary()
 
-        if self.filtered_images:
-            self.image_list.setCurrentRow(self.current_index)
-            self.load_current_image_data()
-            self.update_display()
+        # Kick off background scan — first batch triggers the initial display
+        self.start_scan(self.drive)
 
         self.center_window()
         self.show()
@@ -370,15 +372,128 @@ class ImageLoader(QMainWindow):
         center_on_primary_screen(self)
 
     # -----------------------------
+    # Background scanner
+    # -----------------------------
+    def start_scan(self, path: str):
+        """Stop any running scan and start a fresh one for *path*."""
+        self.stop_scan()
+        self.images.clear()
+        self.filtered_images.clear()
+        self.list_page_start = 0
+        self.scan_complete = False
+        self.scan_status_label.setText("Scanning…")
+
+        self.species_filter_group.setEnabled(False)
+        self.species_filter_group.setToolTip("Species filter is available after scanning completes.")
+
+        self.scanner = ImageScanner(path, parent=self)
+        self.scanner.batch_ready.connect(self.on_scan_batch)
+        self.scanner.scan_done.connect(self.on_scan_done)
+        self.scanner.start()
+
+    def stop_scan(self):
+        if self.scanner and self.scanner.isRunning():
+            self.scanner.stop()
+            self.scanner.wait()
+        self.scanner = None
+
+    def on_scan_batch(self, batch: list):
+        was_empty = len(self.images) == 0
+        self.images.extend(batch)
+        self.scan_status_label.setText(f"Scanning… {len(self.images):,} found")
+
+        # Extend filtered_images incrementally instead of rebuilding the whole
+        # list on every batch — rebuilding becomes O(n²) over 1.7M images.
+        if self.filter_mode == "all":
+            self.filtered_images.extend(batch)
+        elif self.filter_mode == "unverified":
+            self.filtered_images.extend(
+                p for p in batch if not self.training_manager.is_verified_cached(p)
+            )
+        elif self.filter_mode == "verified":
+            self.filtered_images.extend(
+                p for p in batch if self.training_manager.is_verified_cached(p)
+            )
+        # model_verified / model_discarded / recently_deleted are not driven by
+        # the background scan, so don't touch filtered_images for those modes.
+
+        # Show the first image as soon as the first batch arrives
+        if was_empty and self.filtered_images:
+            self.current_index = 0
+            self.list_page_start = 0
+            self.load_image_list()
+            self.load_current_image_data()
+            self.update_display()
+        else:
+            # Refresh the list to reflect new items (only if current page is the last one)
+            page_end = self.list_page_start + LIST_PAGE_SIZE
+            if page_end >= len(self.filtered_images) - len(batch):
+                self.load_image_list()
+
+    def on_scan_done(self, total: int):
+        self.scan_complete = True
+        self.scan_status_label.setText(f"{total:,} images")
+        self.species_filter_group.setEnabled(True)
+        self.species_filter_group.setToolTip("")
+        self.load_image_list()
+
+    def rebuild_filtered(self):
+        """Re-apply the current filter_mode to self.images in place."""
+        if self.filter_mode == "all":
+            self.filtered_images = list(self.images)
+        elif self.filter_mode == "verified":
+            self.filtered_images = [
+                p for p in self.images if self.training_manager.is_verified_cached(p)
+            ]
+        elif self.filter_mode == "unverified":
+            self.filtered_images = [
+                p for p in self.images if not self.training_manager.is_verified_cached(p)
+            ]
+        # model_verified / model_discarded / recently_deleted filters are not affected
+        # by the background scan, so leave them unchanged when active.
+
+    # -----------------------------
     # Image handle functions
     # -----------------------------
     def load_image_list(self):
+        """Populate the list widget with one page of filtered_images."""
         self.image_list.clear()
 
-        for image in self.filtered_images: #type: ignore
+        page_end = min(self.list_page_start + LIST_PAGE_SIZE, len(self.filtered_images))
+        for image in self.filtered_images[self.list_page_start:page_end]:
             item = QListWidgetItem(Path(image).name)
-            item.setData(Qt.UserRole, image) # type: ignore
+            item.setData(Qt.UserRole, image)  # type: ignore
             self.image_list.addItem(item)
+
+        # Scroll detection: when the user reaches the last item, advance the page
+        self.image_list.verticalScrollBar().valueChanged.connect(self.on_list_scroll)
+
+    def on_list_scroll(self, value: int):
+        """Advance or retreat the page when the user scrolls to the edge."""
+        sb = self.image_list.verticalScrollBar()
+        if value == sb.maximum() and not self.at_last_page():
+            self.list_page_start += LIST_PAGE_SIZE
+            self.load_image_list()
+        elif value == sb.minimum() and self.list_page_start > 0:
+            self.list_page_start = max(0, self.list_page_start - LIST_PAGE_SIZE)
+            self.load_image_list()
+            # Scroll to bottom of newly loaded page so user sees continuity
+            self.image_list.verticalScrollBar().setValue(
+                self.image_list.verticalScrollBar().maximum()
+            )
+
+    def at_last_page(self) -> bool:
+        return self.list_page_start + LIST_PAGE_SIZE >= len(self.filtered_images)
+
+    def ensure_index_in_page(self, abs_index: int):
+        """If abs_index is outside the current page, shift the page to include it."""
+        if abs_index < self.list_page_start or abs_index >= self.list_page_start + LIST_PAGE_SIZE:
+            self.list_page_start = (abs_index // LIST_PAGE_SIZE) * LIST_PAGE_SIZE
+            self.load_image_list()
+
+    def list_row(self, abs_index: int) -> int:
+        """Convert an absolute filtered_images index to a QListWidget row."""
+        return abs_index - self.list_page_start
 
     def filter_list(self, text):
         text = text.lower()
@@ -412,8 +527,11 @@ class ImageLoader(QMainWindow):
             self.recently_deleted_count += 1
             self.update_verification_summary()
             
-        self.get_imgs(self.drive, True)
-        self.image_list.takeItem(self.current_index)
+        # Remove from master list and filtered list in-place (avoids re-walking the drive)
+        if file_path in self.images:
+            self.images.remove(file_path)
+        if file_path in self.filtered_images:
+            self.filtered_images.remove(file_path)
 
         show_info(
             self,
@@ -421,8 +539,10 @@ class ImageLoader(QMainWindow):
             f"Deleted from:\n{file_path}\n Move to Recently Deleted Folder"
         )
 
-        if self.images:
-            self.current_index = min(self.current_index, len(self.images) - 1)
+        if self.filtered_images:
+            self.current_index = min(self.current_index, len(self.filtered_images) - 1)
+            self.ensure_index_in_page(self.current_index)
+            self.load_image_list()
             self.load_current_image_data()
             self.update_display()
         else:
@@ -466,7 +586,7 @@ class ImageLoader(QMainWindow):
         self.summary_recently_removed_value.setText(str(self.recently_deleted_count))
 
     def on_list_item_clicked(self, item):
-        self.current_index = self.image_list.row(item)
+        self.current_index = self.image_list.row(item) + self.list_page_start
         self.load_current_image_data()
         self.update_display()
         
@@ -735,8 +855,10 @@ class ImageLoader(QMainWindow):
         if self.current_base_bgr is None and self.current_unverified_bgr is None:
             return
 
-        if self.current_index < self.image_list.count():
-            self.image_list.setCurrentRow(self.current_index)
+        self.ensure_index_in_page(self.current_index)
+        row = self.list_row(self.current_index)
+        if 0 <= row < self.image_list.count():
+            self.image_list.setCurrentRow(row)
 
         # At this point either current_base_bgr or current_unverified_bgr is available,
         # so there's no need to re-read the image from disk here.
@@ -902,7 +1024,7 @@ class ImageLoader(QMainWindow):
         self.image_label.setStyleSheet("")
         self.refresh_filter(keep_current=True) # refresh the current image after we unverify it
   
-    def get_imgs(self,path,new_dir=False,deleted_folder=False):
+    def get_imgs(self, path, new_dir=False, deleted_folder=False) -> list[str]:
         if(new_dir):
             self.images.clear()
             self.deletion_bounding_box_cords.clear()
@@ -921,8 +1043,7 @@ class ImageLoader(QMainWindow):
         self.filtered_images = list(imgs)
         if not imgs:
             show_no_images_popup(self)
-            return
-        return
+        return []
     
     def open_dir_dialog(self):
         dir_name = pick_directory(self, "Select a Directory")
@@ -930,24 +1051,16 @@ class ImageLoader(QMainWindow):
             path = Path(dir_name)
             self.current_index = 0
             self.drive = str(path)
-
-
-            self.get_imgs(self.drive, True)
-            self.load_image_list()
-
-            if self.images:
-                self.image_list.setCurrentRow(0)
-                self.filter_dropdown.setCurrentIndex(0)
-                self.load_current_image_data()
-                self.update_display()
-            else:
-                self.image_label.setText("No images found")
-            
+            self.filter_dropdown.setCurrentIndex(0)
+            self.filter_mode = "all"
             if self.model_verified:
                 self.model_verified.clear()
             if self.model_discarded:
                 self.model_discarded.clear()
             self.training_manager = TrainingManager(self.drive)
+            self.image_list.clear()
+            self.image_label.setText("Scanning...")
+            self.start_scan(self.drive)
 
     def menu_window(self):
         from Window_Screen_Classes.home_menu import MenuWindow
@@ -1041,11 +1154,15 @@ class ImageLoader(QMainWindow):
                     filtered_by_species.append(img)
             self.filtered_images = filtered_by_species
 
-        if current_path and current_path in self.filtered_images:
-            self.current_index = self.filtered_images.index(current_path) #type: ignore
+        if current_path:
+            try:
+                self.current_index = self.filtered_images.index(current_path)  # type: ignore
+            except ValueError:
+                self.current_index = 0
         else:
             self.current_index = 0
 
+        self.list_page_start = (self.current_index // LIST_PAGE_SIZE) * LIST_PAGE_SIZE
         self.load_image_list()
 
         if self.filtered_images:
@@ -1181,6 +1298,10 @@ class ImageLoader(QMainWindow):
         self.predictionWindow.show()
         self.close()
     
+    def closeEvent(self, event):
+        self.stop_scan()
+        event.accept()
+
     def on_image_clicked(self, x, y):
         img_x, img_y = self.map_to_image_coordinates(x, y)
 
