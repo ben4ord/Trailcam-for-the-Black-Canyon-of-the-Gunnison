@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton
 from PySide6.QtCore import Qt
 
-from image_viewer import ImageLoader
+from batch_selection_window import BatchWindow
 from nav_bar import NavBar
 from train_model import TrainModel
 from window_utils import center_on_primary_screen
@@ -40,7 +40,7 @@ class MenuWindow(QMainWindow):
         
         # Add button to next window
         self.viewImages = QPushButton('View Images')
-        self.viewImages.clicked.connect(self.view_image_window)
+        self.viewImages.clicked.connect(self.batch_selection_window)
         layout.addWidget(self.viewImages, 1, 0, 2, 6)
 
         # Add button for training new model
@@ -52,8 +52,8 @@ class MenuWindow(QMainWindow):
         self.show()
 
 
-    def view_image_window(self):
-        self.imageWindow = ImageLoader(self.drive)
+    def batch_selection_window(self):
+        self.imageWindow = BatchWindow(self.drive)
         self.imageWindow.show()
         self.close()
 
