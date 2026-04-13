@@ -1,12 +1,11 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QSlider,QLabel,QComboBox
 from PySide6.QtCore import Qt
 
-from image_viewer import ImageLoader
-from nav_bar import NavBar
-from data_extraction import DataExtraction
+from Window_Screen_Classes.image_viewer import ImageLoader
+from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import center_on_primary_screen
+from Prediction_Classes.data_extraction import DataExtraction
 from datetime import datetime, timedelta
-from window_utils import center_on_primary_screen
-
 class ExportWindow(QMainWindow):
     def __init__(self,drive):
         super().__init__()

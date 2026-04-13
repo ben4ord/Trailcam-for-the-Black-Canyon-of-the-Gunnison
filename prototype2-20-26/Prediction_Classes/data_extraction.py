@@ -12,14 +12,13 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt,QTimer
 import os
 from pathlib import Path
-
 from sympy import root
-from nav_bar import NavBar
-from window_utils import center_on_primary_screen
-from model_prediction import ImageLabeler
+from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import center_on_primary_screen
+from Prediction_Classes.model_prediction import ImageLabeler
 import pandas as pd
 from datetime import datetime, timedelta
-from label_store import LabelStore
+from Helper_Classes.label_store import LabelStore
 from pathlib import PureWindowsPath
 
 
@@ -95,7 +94,6 @@ class DataExtraction(QMainWindow):
         QTimer.singleShot(0, self.start_processing)
 
     def start_processing(self):
-        # print(f"Total Images Found {self.total_images}")
         self.labeler = ImageLabeler()
         self.show_counting_images_popup()
         self.total_images = self.count_images(self.drive)
@@ -158,7 +156,6 @@ class DataExtraction(QMainWindow):
             self.open_dir_dialog()
 
     def extract_data(self):
-        # print("predicting images")
         self.detections = []
         self.last_image_time = None
         image_counter = 0
@@ -169,11 +166,7 @@ class DataExtraction(QMainWindow):
         animal_stats = pd.DataFrame(columns=["Filepath", "Site", "Date", "Time", "TotalAnimals", "AnimalNumber", "Species", "class_id", "Confidence", "BBox_XYXY", "BBox_XYWHN"])
         rows = []
         self.load_labels()
-        print(self.labels)
         for root, dirs, files in os.walk(self.drive):
-            # print(f"Current directory: {root}")
-            # print(f"Subdirectories: {dirs}")
-            # print(f"Files: {files}")
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
@@ -182,7 +175,6 @@ class DataExtraction(QMainWindow):
 
                     # Check abort flag
                     if self.abort_requested:
-                        #print("Prediction aborted")
                         return
                     dt_obj,img_date, img_time = self.labeler.get_date_time(file_path)
                     
@@ -242,9 +234,14 @@ class DataExtraction(QMainWindow):
         animal_stats = pd.DataFrame(rows)
         # Define the path to the Downloads folder
         downloads_path = str(Path.home() / "Downloads" / "BCG_Animal_Stats.csv")
-        animal_stats.to_csv(downloads_path, index=False)
-        self.alert_download_location(downloads_path)
+        try:
+            animal_stats.to_csv(downloads_path, index=False)
+            self.alert_download_location(downloads_path)
 
+        except PermissionError as e:
+            if e.errno == 13 and os.name == 'nt':  # Windows-specific error code for permission denied
+                self.alert_download_location("ERROR: Unable to save file. Please close any open instances of 'BCG_Animal_Stats.csv' and try again.")
+        
 
     def get_camera_site(self,file_path: str) -> str | None:
         """
@@ -267,17 +264,16 @@ class DataExtraction(QMainWindow):
         msg.exec()
 
     def open_dir_dialog(self):
-            from window_utils import pick_directory
+            from Helper_Classes.window_utils import pick_directory
             self.drive = pick_directory(self)
     
     def view_menu_window(self):
-        from home_menu import MenuWindow
+        from Window_Screen_Classes.home_menu import MenuWindow
         self.imageWindow = MenuWindow(self.drive)
         self.imageWindow.show()
         self.close()
                     
     def request_abort(self):
-        #print("Abort requested")
         self.abort_requested = True
 
     def load_labels(self):
