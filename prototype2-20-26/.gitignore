@@ -6,6 +6,7 @@ __pycache__/
 settings.json
 verified_images/
 verified_images_less_people/
+verified_images_test/
 reduce_people_images.py
 build/*
 select_directory.spec
