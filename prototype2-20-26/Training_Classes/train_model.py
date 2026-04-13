@@ -23,6 +23,7 @@ from Training_Classes.training_session import get_training_session
 from Helper_Classes.ui_dialogs import confirm_action
 from Helper_Classes.label_store import LabelStore
 import datetime
+import datetime
 
 
 class TrainModel(QMainWindow):
@@ -32,6 +33,10 @@ class TrainModel(QMainWindow):
         # Shared variable keeps run state consistent across reopened windows.
         self.session = get_training_session()
         self.abort_force_ms = 30000 # 30 seconds
+        self.abort_force_timer = QTimer(self)
+        self.abort_force_timer.setSingleShot(True)
+        self.abort_force_timer.timeout.connect(self.force_kill_if_still_running)
+        self.abort_force_counter = None
         self.last_completion_counter = -1
         self.last_debug_text = ""
         self.last_log_text = ""
@@ -251,6 +256,10 @@ class TrainModel(QMainWindow):
             QMessageBox.information(self, "Training Busy", message)
             return
 
+        # Reset timeout for force kill
+        self.abort_force_timer.stop()
+        self.abort_force_counter = None
+
         self.set_busy_progress()
         self.progress_label.setText("Launching training...")
         self.debug_label.setText("Debug: waiting for first completed epoch...")
@@ -288,10 +297,15 @@ class TrainModel(QMainWindow):
             "large": TrainingConfig.large,
         }
         training_config = config_builders[config_key]()
+        training_config.device = self.get_device()
         ok, message = self.session.start(self.drive, training_config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
             return
+
+        # Reset timeout for force kill
+        self.abort_force_timer.stop()
+        self.abort_force_counter = None
 
         self.set_busy_progress()
         self.progress_label.setText("Launching training...")
@@ -319,7 +333,8 @@ class TrainModel(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.progress_label.setText("Stopping training (this may take a while)...")
         self.debug_label.setText("Debug: stop requested from UI.")
-        QTimer.singleShot(self.abort_force_ms, self.force_kill_if_still_running)
+        self.abort_force_counter = int(snapshot["completion_counter"])
+        self.abort_force_timer.start(self.abort_force_ms)
 
     # This function is to force kill the process after a certain amount of time
     # Sometimes the process will not terminate gracefully and we need to be able to force quit training
@@ -327,10 +342,19 @@ class TrainModel(QMainWindow):
     def force_kill_if_still_running(self):
         """Force kill training process if it ignores graceful stop request."""
         snapshot = self.session.snapshot()
+        if self.abort_force_counter is not None:
+            current_counter = int(snapshot["completion_counter"])
+            if current_counter != self.abort_force_counter:
+                # A previous run already finished, so this timeout belongs to an
+                # old abort request and must not kill a newly started run.
+                self.abort_force_counter = None
+                return
         if not snapshot["running"]:
+            self.abort_force_counter = None
             return
 
         killed = self.session.force_kill()
+        self.abort_force_counter = None
         if killed:
             QMessageBox.warning(
                 self,
@@ -397,6 +421,11 @@ class TrainModel(QMainWindow):
         if current_counter != self.last_completion_counter:
             # Counter increments once at each terminal state transition.
             self.last_completion_counter = current_counter
+
+            # Reset timeout for force kill
+            self.abort_force_timer.stop()
+            self.abort_force_counter = None
+            
             if current_counter <= 0:
                 return
             if was_running is not True:

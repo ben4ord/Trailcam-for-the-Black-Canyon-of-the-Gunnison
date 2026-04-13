@@ -19,7 +19,8 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QTabWidget,
     QSplitter,
-    QScrollArea,
+    QScrollArea,,
+    QTabWidget,
 )
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QPixmap, QShortcut,QGuiApplication
@@ -258,6 +259,29 @@ class ImageLoader(QMainWindow):
 
         # -----------------------------
         # Layout placement
+        # -----------------------------
+        # Left-panel tab widget
+        # Consolidates detections, species filter, and summary into one area
+        # so the image can use the full available height.
+        # -----------------------------
+        self.left_tabs = QTabWidget()
+
+        det_tab = QWidget()
+        det_layout = QVBoxLayout(det_tab)
+        det_layout.setContentsMargins(2, 2, 2, 2)
+        det_layout.addWidget(self.detection_label)
+        det_layout.addWidget(self.detection_editor)
+        self.left_tabs.addTab(det_tab, "Detections")
+
+        self.left_tabs.addTab(self.species_filter_group, "Species Filter")
+
+        summary_tab = QWidget()
+        summary_layout = QVBoxLayout(summary_tab)
+        summary_layout.setContentsMargins(2, 2, 2, 2)
+        summary_layout.addWidget(self.verification_summary_box)
+        summary_layout.addStretch()
+        self.left_tabs.addTab(summary_tab, "Summary")
+
         # -----------------------------
         # Left-panel tab widget
         # Consolidates detections, species filter, and summary into one area
