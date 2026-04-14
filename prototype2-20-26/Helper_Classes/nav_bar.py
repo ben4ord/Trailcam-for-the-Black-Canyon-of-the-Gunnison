@@ -1,11 +1,15 @@
-from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout, QComboBox
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
 import qtawesome as qta
+import os
+
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "Models")
 
 def icon(name: str):
     """Return a qtawesome icon forced to white regardless of system theme."""
     return qta.icon(name, color='white')  # type: ignore[call-arg]
 from Training_Classes.training_session import get_training_session
+from Helper_Classes.model_selection_state import get_model_selection_state
 
 
 class NavBar(QWidget):
@@ -13,12 +17,14 @@ class NavBar(QWidget):
     updateLabelsClicked = Signal()
     newFolderClicked = Signal()
     newBatchClicked = Signal()
+    modelSelected = Signal(str)  # emits full path to the selected .pt file
 
     def __init__(self, parent_window):
         super().__init__()
 
         self.parent_window = parent_window
         self.training_session = get_training_session()
+        self._model_state = get_model_selection_state()
         self.drag_active = False
         self.drag_position = QPoint()
         self.press_pos = QPoint()
@@ -66,11 +72,24 @@ class NavBar(QWidget):
             "padding: 2px 8px; border-radius: 8px; background: #2d3a47; color: #b9c4d0;"
         )
 
+        # Model Selection dropdown + refresh button
+        self.model_selection_box = QComboBox()
+        self.model_selection_box.setToolTip("Select prediction model")
+        self.model_selection_box.currentIndexChanged.connect(self.on_model_selected)
+
+        self.model_refresh_btn = QPushButton()
+        self.model_refresh_btn.setIcon(qta.icon("fa5s.sync-alt", color="white"))
+        self.model_refresh_btn.setFixedSize(26, 26)
+        self.model_refresh_btn.setToolTip("Refresh model list")
+        self.model_refresh_btn.clicked.connect(self.populate_model_dropdown)
+
         layout.addWidget(self.home_btn)
         layout.addWidget(self.update_labels_btn)
         layout.addWidget(self.new_folder_btn)
         layout.addWidget(self.new_batch_btn)
         layout.addWidget(self.training_status_btn)
+        layout.addWidget(self.model_selection_box)
+        layout.addWidget(self.model_refresh_btn)
 
         layout.addStretch()
 
@@ -101,6 +120,8 @@ class NavBar(QWidget):
         self.training_status_timer.timeout.connect(self.refresh_training_status)
         self.training_status_timer.start()
         self.refresh_training_status()
+
+        self.populate_model_dropdown()
 
         self.update()
 
@@ -184,12 +205,14 @@ class NavBar(QWidget):
     
     # certain windows don't need all the nav bar buttons visible
     # this function allows them to decide which ones they want to see (all are true by default)
-    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, training_status=True,batch_status=False):
+    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, training_status=True, batch_status=False, model_selector=True):
         self.home_btn.setVisible(home)
         self.update_labels_btn.setVisible(update_labels)
         self.new_folder_btn.setVisible(new_folder)
         self.training_status_btn.setVisible(training_status)
         self.new_batch_btn.setVisible(batch_status)
+        self.model_selection_box.setVisible(model_selector)
+        self.model_refresh_btn.setVisible(model_selector)
 
     # we need to modify the training status based on the session tracking for training
     # this function will refresh the training status based on the snapshot generated (this is explained more in the training_session file)
@@ -265,3 +288,42 @@ class NavBar(QWidget):
         self.parent_window.trainWindow = TrainModel(drive)
         self.parent_window.trainWindow.show()
         self.parent_window.close()
+
+    # Grab the model names from the Models folder and populate the dropdown based on it
+    def populate_model_dropdown(self):
+        """Populate available checkpoint files from the project-level `Models/` folder."""
+        self.model_selection_box.blockSignals(True)
+        self.model_selection_box.clear()
+
+        if os.path.isdir(MODELS_DIR):
+            for root, _dirs, files in os.walk(MODELS_DIR):
+                for f in sorted(files):
+                    if f.endswith(".pt") and f != "last.pt":
+                        full_path = os.path.normpath(os.path.join(root, f))
+                        display = os.path.relpath(full_path, start=MODELS_DIR)
+                        self.model_selection_box.addItem(display, userData=full_path)
+
+        self.model_selection_box.blockSignals(False)
+
+        # Restore the last selection from the process-wide singleton
+        saved_path = self._model_state.get()
+        if saved_path:
+            idx = self.model_selection_box.findData(saved_path)
+            if idx >= 0:
+                self.model_selection_box.setCurrentIndex(idx)
+                return
+
+        # Nothing saved yet — emit so consumers pick up the default
+        if self.model_selection_box.count() > 0:
+            self.on_model_selected(0)
+
+    def on_model_selected(self, index):
+        """Persist the selection and emit so consumers can reload their labeler."""
+        full_path = self.model_selection_box.currentData()
+        if full_path:
+            self._model_state.set(full_path)
+            self.modelSelected.emit(full_path)
+
+    def selected_model_path(self) -> str:
+        """Return the full path of the currently selected model, or empty string."""
+        return self.model_selection_box.currentData() or ""
