@@ -77,14 +77,23 @@ class MainWindow(QMainWindow):
 
     from pathlib import Path
 
-    def ensure_delete_folder(self):
-        target_path = Path.home() / "Recently Deleted"
+    from pathlib import Path
 
-        if not target_path.exists():
-            target_path.mkdir()
-            print(f"Created folder at: {target_path.resolve()}")
-        else:
-            print(f"Folder already exists at: {target_path.resolve()}")
+    def ensure_delete_folder(self):
+        # 1. Get the path from the UI and turn it into a Path object
+        base_path = Path(self.dir_name_edit.text())
+        
+        # 2. Join the root (anchor) with your folder name
+        # Using / is the pathlib way to join paths safely
+        target_path = Path(base_path.anchor) / "Recently Deleted"
+        
+        # 3. Create the folder
+        # parents=True: creates any missing intermediate folders
+        # exist_ok=True: doesn't crash if the folder is already there
+        target_path.mkdir(parents=True, exist_ok=True)
+        
+        print(f"Folder ready at: {target_path.resolve()}")
+
 
 if __name__ == '__main__':
     # Look for training in the background 
