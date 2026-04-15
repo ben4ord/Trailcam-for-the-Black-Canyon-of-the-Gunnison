@@ -124,11 +124,7 @@ class ImageLabeler:
             r = results[0]
 
             if r.boxes is None or len(r.boxes) == 0:
-                return {"Filepath": image_path,
-                        "Site": None,
-                        "Date": None,
-                        "class_ids": [],
-                        "confidences": []}
+                return None
 
             return {
                 "Filepath": image_path,
