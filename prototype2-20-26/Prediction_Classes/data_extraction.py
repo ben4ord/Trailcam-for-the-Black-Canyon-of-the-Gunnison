@@ -20,6 +20,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from Helper_Classes.label_store import LabelStore
 from pathlib import PureWindowsPath
+from time import perf_counter
 
 
 class DataExtraction(QMainWindow):
@@ -38,8 +39,6 @@ class DataExtraction(QMainWindow):
         self.image_time_period = image_time_period
         self.counting_dialog = None
         self.counting_label = None
-
-        
 
         self.resize(600, 200)
         self.setContentsMargins(0, 0, 0, 0)
@@ -69,17 +68,21 @@ class DataExtraction(QMainWindow):
         layout.setSpacing(0)
         self.setLayout(layout)
 
-        # Progress bar for epoch tracking
+        # Time estimation label
+        self.time_estimation_label = QLabel("Estimated Time Remaining: Calculating...")
+        layout.addWidget(self.time_estimation_label, 1, 0, 1, 6)
+
+        # Progress bar for data extraction tracking
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0.0%")
-        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.progress_bar, 2, 0, 1, 6)
 
         # Abort Button
         self.abort_button = QPushButton("Abort")
         self.abort_button.clicked.connect(self.request_abort)
-        layout.addWidget(self.abort_button)
+        layout.addWidget(self.abort_button, 3, 0, 1, 6)
         
         center_on_primary_screen(self)
         self.show()
@@ -158,26 +161,32 @@ class DataExtraction(QMainWindow):
     def extract_data(self):
         self.detections = []
         self.last_image_time = None
+        self.last_camera_site = None
         image_counter = 0
+        estimated_time_remaining = "Calculating..."
 
         if self.total_images == 0:
             print("No images found in the directory.")
             return
         animal_stats = pd.DataFrame(columns=["Filepath", "Site", "Date", "Time", "TotalAnimals", "AnimalNumber", "Species", "class_id", "Confidence", "BBox_XYXY", "BBox_XYWHN"])
         rows = []
-        self.load_labels()
+        self.load_labels() 
+        self.start_time = perf_counter()     
         for root, dirs, files in os.walk(self.drive):
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
                     file_path = os.path.join(root, file)
                     image_counter +=1
-
                     # Check abort flag
                     if self.abort_requested:
                         return
                     dt_obj,img_date, img_time = self.labeler.get_date_time(file_path)
-                    
+                    camera_site = self.get_camera_site(file_path)
+
+                    if camera_site != self.last_camera_site:
+                        self.last_camera_site = camera_site # Change last camera site to current camera site
+                        self.last_image_time = None # reset last image time when camera site changes
                     
                     if dt_obj and img_date and img_time:
 
@@ -193,32 +202,32 @@ class DataExtraction(QMainWindow):
                                 elif self.opp_system == 'posix':
                                     date_str = dt_obj.strftime("%-m/%-d/%Y")
                                     time_str = dt_obj.strftime("%-I:%M:%S %p")  
-                            det_index = 0
-                            animal_number = 1
-                            for conf in detections['confidences']:
-    
+                                det_index = 0
+                                animal_number = 1
+                                for conf in detections['confidences']:
+        
 
-                                if conf >= self.model_threshold: 
-                                    
-                                    rows.append({
-                                        "Filepath": detections["image_path"],
-                                        "Site": self.get_camera_site(detections["image_path"]),
-                                        "Date": date_str,
-                                        "Time": time_str,
-                                        "TotalAnimals": total_animals,
-                                        "AnimalNumber": animal_number,
-                                        "Species": self.labels[detections["class_ids"][det_index]],
-                                        "class_id": detections["class_ids"][det_index],
-                                        "Confidence": detections["confidences"][det_index],
-                                        "BBox_XYXY": detections["bbox_xyxy"][det_index],
-                                        "BBox_XYWHN": detections["bbox_xywhn"][det_index]
-                                    })
-                                    animal_number += 1
-                                    det_index += 1
-                                    if det_index >= len(detections['class_ids']):
-                                        det_index = 0
-                                    if animal_number > len(detections['class_ids']):
-                                        animal_number = 1
+                                    if conf >= self.model_threshold: 
+                                        
+                                        rows.append({
+                                            "Filepath": detections["image_path"],
+                                            "Site": self.get_camera_site(detections["image_path"]),
+                                            "Date": date_str,
+                                            "Time": time_str,
+                                            "TotalAnimals": total_animals,
+                                            "AnimalNumber": animal_number,
+                                            "Species": self.labels[detections["class_ids"][det_index]],
+                                            "class_id": detections["class_ids"][det_index],
+                                            "Confidence": detections["confidences"][det_index],
+                                            "BBox_XYXY": detections["bbox_xyxy"][det_index],
+                                            "BBox_XYWHN": detections["bbox_xywhn"][det_index]
+                                        })
+                                        animal_number += 1
+                                        det_index += 1
+                                        if det_index >= len(detections['class_ids']):
+                                            det_index = 0
+                                        if animal_number > len(detections['class_ids']):
+                                            animal_number = 1
                                 
                             # update progress
                             percent = round(((image_counter) / self.total_images) * 100,4)
@@ -230,6 +239,19 @@ class DataExtraction(QMainWindow):
                     self.total_images -= 1 # if no date time found, remove from total count for progress bar accuracy
                 # let UI breathe between predictions
                 QApplication.processEvents()
+                if image_counter % 100 == 0:
+                    elapsed_time = perf_counter() - self.start_time
+                    images_left = self.total_images - image_counter
+
+                    if image_counter > 0:
+                        time_per_image = elapsed_time / image_counter
+                        estimated_seconds = time_per_image * images_left
+                        estimated_time_remaining = str(timedelta(seconds=int(estimated_seconds)))
+
+                        self.time_estimation_label.setText(
+                            f"Estimated Time Remaining: {estimated_time_remaining}"
+                        )
+
         root = Path(self.drive).anchor
         animal_stats = pd.DataFrame(rows)
         # Define the path to the Downloads folder
