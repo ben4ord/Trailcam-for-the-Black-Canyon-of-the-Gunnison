@@ -7,6 +7,7 @@ which launches `training_subprocess.py` and exposes a polling snapshot API.
 import os
 import re
 
+import math
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QGuiApplication
 
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
+from Helper_Classes.app_paths import app_base_dir
 from Helper_Classes.nav_bar import NavBar
 import torch
 import qtawesome as qta
@@ -38,9 +40,12 @@ class TrainModel(QMainWindow):
         self.abort_force_timer.timeout.connect(self.force_kill_if_still_running)
         self.abort_force_counter = None
         self.last_completion_counter = -1
-        self.last_debug_text = ""
-        self.last_log_text = ""
+        self.last_output_text = ""
         self.prev_running = None
+        self._anim_step = 0
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(30)
+        self._anim_timer.timeout.connect(self._animate_busy)
 
         self.resize(800, 500)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
@@ -55,6 +60,7 @@ class TrainModel(QMainWindow):
             home=True,
             update_labels=True,
             new_folder=False,
+            model_selector=False
         )
         self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.updateLabelsClicked.connect(self.open_label_editor)
@@ -75,17 +81,6 @@ class TrainModel(QMainWindow):
         )
         layout.addWidget(self.debug_label)
 
-        # Debug view (that box where the debug prints go)
-        self.debug_view = QTextEdit()
-        self.debug_view.setReadOnly(True)
-        self.debug_view.setMaximumHeight(120)
-        layout.addWidget(self.debug_view)
-
-        # Copy debug logs button (easy of use)
-        self.copy_debug_btn = QPushButton("Copy Debug Logs")
-        self.copy_debug_btn.clicked.connect(self.copy_debug_logs)
-        layout.addWidget(self.copy_debug_btn)
-
         # Progress bar for epoch tracking
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 10000)
@@ -93,11 +88,16 @@ class TrainModel(QMainWindow):
         self.progress_bar.setFormat("0.0%")
         layout.addWidget(self.progress_bar)
 
-        # Log box for training messages and errors.
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setMaximumHeight(120)
-        layout.addWidget(self.log_view)
+        # Combined output terminal for log and debug messages
+        self.output_view = QTextEdit()
+        self.output_view.setReadOnly(True)
+        self.output_view.setMaximumHeight(200)
+        layout.addWidget(self.output_view)
+
+        # Copy logs button
+        self.copy_logs_btn = QPushButton("Copy Logs")
+        self.copy_logs_btn.clicked.connect(self.copy_logs)
+        layout.addWidget(self.copy_logs_btn)
 
         # Train Button
         self.train_btn = QPushButton("Train New Model")
@@ -151,17 +151,26 @@ class TrainModel(QMainWindow):
         self.refresh_timer.start()
         self.refresh_session_ui()
 
-    # Sets text in view when background processes are working
     def set_busy_progress(self):
-        """Switch to indeterminate mode for setup/teardown stages."""
-        self.progress_bar.setRange(0, 0)
+        """Start smooth custom animation instead of Qt's indeterminate mode."""
+        if self._anim_timer.isActive():
+            return
+        self.progress_bar.setRange(0, 10000)
         self.progress_bar.setFormat("Working...")
+        self._anim_step = 0
+        self._anim_timer.start()
 
-    # Sets the range for the progress bar display
     def set_determinate_progress(self):
-        """Restore normal fixed-range mode for percent-based progress."""
-        if self.progress_bar.minimum() == 0 and self.progress_bar.maximum() == 0:
-            self.progress_bar.setRange(0, 10000)
+        """Stop animation and restore normal percent-based mode."""
+        self._anim_timer.stop()
+        self.progress_bar.setRange(0, 10000)
+
+    def _animate_busy(self):
+        """Advance the smooth bouncing animation one frame."""
+        self._anim_step += 1
+        # Sine wave bounces smoothly between 0 and 10000
+        value = int((math.sin(self._anim_step * 0.05) + 1) / 2 * 10000)
+        self.progress_bar.setValue(value)
 
     # Grab the model names from the Models folder and populate the dropdown based on it
     def populate_model_dropdown(self):
@@ -170,7 +179,7 @@ class TrainModel(QMainWindow):
         self.model_combo.clear()
         self.model_combo.addItem("Train from scratch", userData=None)
 
-        models_dir = os.path.join(os.path.dirname(__file__), "Models")
+        models_dir = str(app_base_dir() / "Models")
         if os.path.isdir(models_dir):
             for (root, dirs, files) in os.walk(models_dir):
                 for f in files:
@@ -218,7 +227,7 @@ class TrainModel(QMainWindow):
         last_pt_path = os.path.join(model_dir, "last.pt")
         
         # Verify it exists relative to Models folder
-        models_dir = os.path.join(os.path.dirname(__file__), "Models")
+        models_dir = str(app_base_dir() / "Models")
         full_last_pt_path = os.path.join(models_dir, last_pt_path)
         
         if os.path.isfile(full_last_pt_path):
@@ -373,17 +382,11 @@ class TrainModel(QMainWindow):
         was_running = self.prev_running
         self.prev_running = snapshot["running"]
 
-        # Grab the debug text from the training snapshot
-        debug_text = "\n".join(snapshot["debug_lines"])
-        if debug_text != self.last_debug_text:
-            self.debug_view.setPlainText(debug_text)
-            self.last_debug_text = debug_text
-
-        log_text = "\n".join(snapshot["log_lines"])
-        if log_text != self.last_log_text:
-            self.log_view.setPlainText(log_text)
-            self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
-            self.last_log_text = log_text
+        output_text = "\n".join(snapshot["log_lines"] + snapshot["debug_lines"])
+        if output_text != self.last_output_text:
+            self.output_view.setPlainText(output_text)
+            self.output_view.verticalScrollBar().setValue(self.output_view.verticalScrollBar().maximum())
+            self.last_output_text = output_text
 
         status = snapshot["status"]
         progress = int(snapshot["progress"])
@@ -453,10 +456,9 @@ class TrainModel(QMainWindow):
                     "Model training finished.",
                 )
 
-    # Copies debug logs to the clipboard (ease of use)
-    def copy_debug_logs(self):
-        """Copy debug log view to clipboard for quick sharing."""
-        QGuiApplication.clipboard().setText(self.debug_view.toPlainText())
+    def copy_logs(self):
+        """Copy output log to clipboard for quick sharing."""
+        QGuiApplication.clipboard().setText(self.output_view.toPlainText())
         self.debug_label.setText("Debug: logs copied to clipboard.")
 
     # Menu window from the nav_bar
@@ -477,4 +479,5 @@ class TrainModel(QMainWindow):
     def closeEvent(self, event: QCloseEvent):
         """Stop polling timer on window close."""
         self.refresh_timer.stop()
+        self._anim_timer.stop()
         event.accept()

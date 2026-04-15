@@ -199,7 +199,7 @@ class TrainingSession:
 
         return [
             bg_python,
-            str(self.base_dir / "training_subprocess.py"),
+            str(self.base_dir / "Training_Classes" / "training_subprocess.py"),
             "--drive",
             drive,
             "--stop-file",
@@ -310,6 +310,7 @@ class TrainingSession:
             self.append_log_locked("Training process exited unexpectedly.")
             self.append_log_locked(f"See launcher log: {self.launch_log_file}")
             self.completion_counter += 1
+        self.write_boot_state_locked()
 
     def is_pid_alive(self, pid: int) -> bool:
         # Cross-platform process liveness check used by stale-run detection.
