@@ -6,9 +6,10 @@ from Helper_Classes.window_utils import center_on_primary_screen
 from Prediction_Classes.model_prediction import ImageLabeler
 
 class BatchPrediction(QMainWindow):
-    def __init__(self,drive,confidence_value,in_image_viewer=False):
+    def __init__(self, drive, confidence_value, in_image_viewer=False, model_path=""):
         super().__init__()
         self.drive = drive
+        self.model_path = model_path
         self.images = []
         self.total_images = 0
         self.abort_requested = False
@@ -68,8 +69,7 @@ class BatchPrediction(QMainWindow):
 
     def start_processing(self):
         self.scan_folders_walk(self.drive)
-        # print(f"Total Images Found {self.total_images}")
-        self.labeler = ImageLabeler()
+        self.labeler = ImageLabeler(self.model_path)
         
         self.predict_all_images()
         self.view_image_window()
@@ -78,9 +78,6 @@ class BatchPrediction(QMainWindow):
     #Collect all images in folder and subfolders
     def scan_folders_walk(self,path):
         for root, dirs, files in os.walk(path):
-            # print(f"Current directory: {root}")
-            # print(f"Subdirectories: {dirs}")
-            # print(f"Files: {files}")
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
@@ -90,7 +87,6 @@ class BatchPrediction(QMainWindow):
     
   
     def predict_all_images(self):
-        # print("predicting images")
         self.detections = []
 
         total = len(self.images)
@@ -98,7 +94,6 @@ class BatchPrediction(QMainWindow):
         for i, img_path in enumerate(self.images):
             # Check abort flag
             if self.abort_requested:
-                #print("Prediction aborted")
                 return
 
             det = self.labeler.get_conf_scores_single(img_path)
@@ -107,7 +102,7 @@ class BatchPrediction(QMainWindow):
 
             # update progress
             percent = ((i + 1) / total) * 100
-            self.progress_bar.setValue(percent)
+            self.progress_bar.setValue(percent) #type: ignore
             self.progress_bar.setFormat(f"{percent:.1f}%")
             # let UI breathe between predictions
             QApplication.processEvents()
@@ -133,6 +128,5 @@ class BatchPrediction(QMainWindow):
         self.close()
                     
     def request_abort(self):
-        #print("Abort requested")
         self.abort_requested = True
             
