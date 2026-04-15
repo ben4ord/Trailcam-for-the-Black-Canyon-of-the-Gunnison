@@ -1149,7 +1149,16 @@ class ImageLoader(QMainWindow):
             else:
                 self.filtered_images = []
         elif self.filter_mode == "recently_deleted":
-            root = Path(self.drive).anchor
+            original_path = Path(self.drive).resolve()
+            if original_path.drive:  # Windows
+                root = Path(original_path.drive + "\\")
+            else:  # macOS/Linux
+                # Expecting /Volumes/DriveName/...
+                if original_path.parts[1] == "Volumes":
+                    root = Path(original_path.parts[0]) / original_path.parts[1] / original_path.parts[2]
+                else:
+                    print("File is not on an external drive.")
+                    return
             deleted_root = Path(root) / "Recently Deleted"
             self.filtered_images = self.get_imgs(deleted_root,False,True)
             self.delete_button.setVisible(False)
