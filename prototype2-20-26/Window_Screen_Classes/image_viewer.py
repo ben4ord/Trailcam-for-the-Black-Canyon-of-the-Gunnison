@@ -549,20 +549,29 @@ class ImageLoader(QMainWindow):
             self.current_index = -1
             show_no_images_popup(self)
 
-    def move_to_recently_deleted(self,original_path_str):
-        original_path = Path(original_path_str)
-        # Extract drive root ("E:\\")
-        root = Path(original_path.anchor)
-        # Define new root
+    def move_to_recently_deleted(self, original_path_str):
+        original_path = Path(original_path_str).resolve()
+
+        # Windows: use drive (D:\)
+        # macOS/Linux: detect /Volumes/<DriveName>
+        if original_path.drive:  # Windows
+            root = Path(original_path.drive + "\\")
+        else:  # macOS/Linux
+            # Expecting /Volumes/DriveName/...
+            if original_path.parts[1] == "Volumes":
+                root = Path(original_path.parts[0]) / original_path.parts[1] / original_path.parts[2]
+            else:
+                print("File is not on an external drive.")
+                return
+
         deleted_root = root / "Recently Deleted"
-        # Get path relative to root
+
         relative_path = original_path.relative_to(root)
-        # Build new destination path
         destination = deleted_root / relative_path
-        # Ensure directory structure exists
+
         destination.parent.mkdir(parents=True, exist_ok=True)
-        # Move the file
         shutil.move(str(original_path), str(destination))
+
         print(f"Moved to: {destination}")
 
     def count_images_in_dir(self, root: Path) -> int:
