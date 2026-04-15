@@ -14,6 +14,9 @@ from Window_Screen_Classes.home_menu import MenuWindow
 from Helper_Classes.nav_bar import NavBar
 from Helper_Classes.window_utils import center_on_primary_screen, pick_directory
 from pathlib import Path
+import platform
+import os
+
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -75,24 +78,29 @@ class MainWindow(QMainWindow):
     def center_window(self):
         center_on_primary_screen(self)
 
-    from pathlib import Path
-
-    from pathlib import Path
 
     def ensure_delete_folder(self):
-        # 1. Get the path from the UI and turn it into a Path object
-        base_path = Path(self.dir_name_edit.text())
+        # 1. Get the path from the UI and resolve it
+        input_path = Path(self.dir_name_edit.text()).resolve()
         
-        # 2. Join the root (anchor) with your folder name
-        # Using / is the pathlib way to join paths safely
-        target_path = Path(base_path.anchor) / "Recently Deleted"
+        if platform.system() == "Windows":
+            # Windows: The 'anchor' is the drive letter (e.g., D:\)
+            drive_root = Path(input_path.anchor)
+        else:
+            # Mac/Linux: Find the mount point (e.g., /Volumes/ExternalDrive)
+            drive_root = input_path
+            while not os.path.ismount(drive_root) and drive_root.parent != drive_root:
+                drive_root = drive_root.parent
+
+        # 2. Create the target path at that specific root
+        target_path = drive_root / "Recently Deleted"
         
-        # 3. Create the folder
-        # parents=True: creates any missing intermediate folders
-        # exist_ok=True: doesn't crash if the folder is already there
-        target_path.mkdir(parents=True, exist_ok=True)
-        
-        print(f"Folder ready at: {target_path.resolve()}")
+        try:
+            target_path.mkdir(parents=True, exist_ok=True)
+            print(f"Verified: {target_path}")
+        except Exception as e:
+            print(f"Error creating folder on {platform.system()}: {e}")
+
 
 
 if __name__ == '__main__':
