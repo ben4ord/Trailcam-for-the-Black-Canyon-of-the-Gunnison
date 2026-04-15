@@ -307,6 +307,7 @@ class TrainModel(QMainWindow):
         }
         training_config = config_builders[config_key]()
         training_config.device = self.get_device()
+        training_config.name = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
         ok, message = self.session.start(self.drive, training_config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
