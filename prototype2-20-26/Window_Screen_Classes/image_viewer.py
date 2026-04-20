@@ -77,6 +77,9 @@ class ImageLoader(QMainWindow):
         self.scanner: ImageScanner | None = None
         self.list_page_start = 0
         self.scan_complete = False
+        self.search_text: str = ""
+        self.base_filtered: list[str] = []  # filtered_images before search is applied
+        self.page_loading = False  # guard against scroll signals firing during page reload (caused the scroll to jump from 500 -> 2000 in cases)
 
         self.load_labels()
         self.current_index = 0
@@ -252,7 +255,7 @@ class ImageLoader(QMainWindow):
         self.search_box.setClearButtonEnabled(True)
 
         self.scan_status_label = QLabel("")
-        self.scan_status_label.setStyleSheet("color: #8fa8c0; font-size: 11px;")
+        self.scan_status_label.setStyleSheet("color: #c8dff0; font-size: 14px; font-weight: bold; margin-left: 16px;")
 
         self.delete_button = QPushButton()
         self.delete_button.setIcon(qta.icon('fa6s.trash'))
@@ -324,13 +327,12 @@ class ImageLoader(QMainWindow):
         content_splitter.addWidget(self.left_tabs)
         content_splitter.addWidget(self.image_label)
         content_splitter.addWidget(self.image_list)
-        # Initial size ratios: left panel small, image large, list small
-        content_splitter.setStretchFactor(0, 1)
-        content_splitter.setStretchFactor(1, 5)
-        content_splitter.setStretchFactor(2, 1)
         content_splitter.setCollapsible(0, False)
         content_splitter.setCollapsible(1, False)
         content_splitter.setCollapsible(2, False)
+        # Give the image panel the majority of space on first open.
+        # setSizes uses pixel values; the splitter normalises them to fit the window.
+        content_splitter.setSizes([180, 900, 160])
 
         # -----------------------------
         # Grid: 4 columns, stretch col 2 to push search box right
@@ -351,6 +353,7 @@ class ImageLoader(QMainWindow):
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
+        self.image_list.verticalScrollBar().valueChanged.connect(self.on_list_scroll)
         self.search_box.textChanged.connect(self.filter_list)
 
         # Populate species filter list now that widgets and labels exist
@@ -465,22 +468,25 @@ class ImageLoader(QMainWindow):
             item.setData(Qt.UserRole, image)  # type: ignore
             self.image_list.addItem(item)
 
-        # Scroll detection: when the user reaches the last item, advance the page
-        self.image_list.verticalScrollBar().valueChanged.connect(self.on_list_scroll)
-
     def on_list_scroll(self, value: int):
         """Advance or retreat the page when the user scrolls to the edge."""
+        if self.page_loading:
+            return
         sb = self.image_list.verticalScrollBar()
-        if value == sb.maximum() and not self.at_last_page():
+        if value == sb.maximum() and sb.maximum() > 0 and not self.at_last_page():
+            self.page_loading = True
             self.list_page_start += LIST_PAGE_SIZE
             self.load_image_list()
+            self.image_list.verticalScrollBar().setValue(0)
+            self.page_loading = False
         elif value == sb.minimum() and self.list_page_start > 0:
+            self.page_loading = True
             self.list_page_start = max(0, self.list_page_start - LIST_PAGE_SIZE)
             self.load_image_list()
-            # Scroll to bottom of newly loaded page so user sees continuity
             self.image_list.verticalScrollBar().setValue(
                 self.image_list.verticalScrollBar().maximum()
             )
+            self.page_loading = False
 
     def at_last_page(self) -> bool:
         return self.list_page_start + LIST_PAGE_SIZE >= len(self.filtered_images)
@@ -496,16 +502,30 @@ class ImageLoader(QMainWindow):
         return abs_index - self.list_page_start
 
     def filter_list(self, text):
-        text = text.lower()
+        self.search_text = text.lower()
 
-        for row in range(self.image_list.count()):
-            item = self.image_list.item(row)
+        if not self.search_text:
+            # Restore the pre-search list
+            if self.base_filtered:
+                self.filtered_images = list(self.base_filtered)
+                self.base_filtered = []
+        else:
+            # Snapshot current filtered_images the first time a search starts
+            if not self.base_filtered:
+                self.base_filtered = list(self.filtered_images)
+            self.filtered_images = [
+                p for p in self.base_filtered
+                if self.search_text in Path(p).name.lower()
+            ]
 
-            filename = item.text().lower()
-            #full_path = item.data(Qt.UserRole).lower()
-
-            match = text in filename
-            item.setHidden(not match)
+        self.list_page_start = 0
+        self.current_index = 0
+        self.load_image_list()
+        if self.filtered_images:
+            self.load_current_image_data()
+            self.update_display()
+        else:
+            self.image_label.setText("No images match search")
 
     def delete_image(self):
         if not self.images:
@@ -1112,6 +1132,12 @@ class ImageLoader(QMainWindow):
 
     def apply_filter(self, mode):
         self.filter_mode = mode
+        # Clear any active search so base_filtered doesn't hold stale data
+        self.base_filtered = []
+        self.search_text = ""
+        self.search_box.blockSignals(True)
+        self.search_box.clear()
+        self.search_box.blockSignals(False)
         self.refresh_filter()
 
     def refresh_filter(self, keep_current: bool = False):

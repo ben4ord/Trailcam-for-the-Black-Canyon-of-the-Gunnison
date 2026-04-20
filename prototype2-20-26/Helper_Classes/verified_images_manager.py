@@ -16,7 +16,7 @@ class TrainingManager:
         # This is for the executable to work properly
         base_dir = Path.cwd()
 
-        self.train_root = base_dir / "verified_images_less_people" / "dataset"
+        self.train_root = base_dir / "verified_images" / "dataset"
 
         self.images_dir = self.train_root / "images"
         self.labels_dir = self.train_root / "labels"
@@ -40,8 +40,8 @@ class TrainingManager:
         return "-" in name and len(name) <= 5
     
     def refresh_verified_cache(self):
-        """Rebuild fast lookup set of all dataset image filenames."""
-        self.verified_cache = {p.name for p in self.images_dir.glob("*") if p.is_file()}
+        """Rebuild fast lookup set of all dataset image filenames (lowercased for case-insensitive matching)."""
+        self.verified_cache = {p.name.lower() for p in self.images_dir.glob("*") if p.is_file()}
 
     # ============================
     # CORE PATH PARSING
@@ -72,21 +72,28 @@ class TrainingManager:
 
     def generate_train_name(self, source_path):
         """Return destination path under dataset/images for given source image."""
-        source_path = Path(source_path)
+        source_path = Path(source_path).resolve()
+
+        # Already a verified copy — return as-is so the path math stays correct.
+        try:
+            source_path.relative_to(self.images_dir.resolve())
+            return source_path
+        except ValueError:
+            pass
 
         new_filename = self.build_full_path_name(source_path)
-
         return self.images_dir / new_filename
 
     def verify_image(self, source_path, label_lines=None):
         """Copy source image into dataset and write/update its YOLO label file."""
-        source_path = Path(source_path)
+        source_path = Path(source_path).resolve()
 
         destination = self.generate_train_name(source_path)
 
-        shutil.copy2(source_path, destination)
+        if source_path != destination:
+            shutil.copy2(source_path, destination)
 
-        self.verified_cache.add(destination.name)
+        self.verified_cache.add(destination.name.lower())
 
         label_path = self.labels_dir / f"{destination.stem}.txt"
 
@@ -104,10 +111,17 @@ class TrainingManager:
     
     def is_verified_cached(self, source_path):
         """Fast in-memory check: does this source image already have dataset copy."""
-        source_path = Path(source_path)
-        filename = self.build_full_path_name(source_path)
+        source_path = Path(source_path).resolve()
 
-        return filename in self.verified_cache
+        # Images already inside images_dir are verified by definition.
+        try:
+            source_path.relative_to(self.images_dir.resolve())
+            return source_path.is_file()
+        except ValueError:
+            pass
+
+        filename = self.build_full_path_name(source_path)
+        return filename.lower() in self.verified_cache
 
     def unverify_image(self, source_path):
         """Remove dataset image and label pair for a previously verified source."""
@@ -125,4 +139,4 @@ class TrainingManager:
         if label_path.exists():
             label_path.unlink()
 
-        self.verified_cache.discard(training_image_path.name)
+        self.verified_cache.discard(training_image_path.name.lower())

@@ -237,7 +237,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
         emit("debug", text="Debug: inactive_labels.txt had no resolvable class IDs.")
         return None
 
-    source_root = base_dir / "verified_images_less_people" / "dataset"
+    source_root = base_dir / "verified_images" / "dataset"
     images_dir = source_root / "images"
     labels_dir = source_root / "labels"
 
@@ -246,7 +246,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
     if not labels_dir.exists():
         raise FileNotFoundError(f"Labels dir not found: {labels_dir}")
 
-    output_root = base_dir / "verified_images_less_people" / "dataset_filtered"
+    output_root = base_dir / "verified_images" / "dataset_filtered"
     if output_root.exists():
         shutil.rmtree(output_root)
 
