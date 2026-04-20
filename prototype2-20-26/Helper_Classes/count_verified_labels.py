@@ -11,7 +11,12 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from pathlib import Path
-
+import sys 
+# Determine base directory (.exe dist)
+if getattr(sys, "frozen", False):
+    base_path = Path(sys.executable).parent
+else:
+    base_path = Path(__file__).resolve().parent
 
 def read_classes(classes_path: Path) -> list[str]:
     if not classes_path.exists():
@@ -70,13 +75,13 @@ def main() -> None:
     parser.add_argument(
         "--labels-dir",
         type=Path,
-        default=Path.cwd() / "verified_images_less_people" / "dataset" / "labels",
+        default=str(Path(base_path / "verified_images_less_people" / "dataset" / "labels")),
         help="Directory containing YOLO .txt label files.",
     )
     parser.add_argument(
         "--classes",
         type=Path,
-        default=Path.cwd() / "classes.txt",
+        default=str(Path(base_path / "classes.txt")),
         help="Path to classes.txt (used for readable class names).",
     )
     parser.add_argument(

@@ -2,8 +2,15 @@ from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout, QComboBox
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
 import qtawesome as qta
 import os
+import sys
+from pathlib import Path
+# Determine base directory (.exe dist)
+if getattr(sys, "frozen", False):
+    base_path = Path(sys.executable).parent
+else:
+    base_path = Path(__file__).resolve().parent
 
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "Models")
+MODELS_DIR = base_path / "Models"
 
 def icon(name: str):
     """Return a qtawesome icon forced to white regardless of system theme."""

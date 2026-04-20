@@ -8,11 +8,13 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QLabel,
     QWidget,
+    QMessageBox
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt,QThread
 from Window_Screen_Classes.home_menu import MenuWindow
 from Helper_Classes.nav_bar import NavBar
 from Helper_Classes.window_utils import center_on_primary_screen, pick_directory
+from Helper_Classes.verified_images import ImageCounterWorker, CountingDialog
 from pathlib import Path
 import platform
 import os
@@ -49,10 +51,14 @@ class MainWindow(QMainWindow):
         dir_btn.clicked.connect(self.open_dir_dialog)
         self.dir_name_edit = QLineEdit()
 
-        # Add button to next window
+        # Add button to Next Window 
         secondaryWindowButton = QPushButton('Next')
         secondaryWindowButton.clicked.connect(self.next_window)
         layout.addWidget(secondaryWindowButton, 0, 0, 1, 1)
+        # Add button to update verified images csv
+        secondaryWindowButton = QPushButton('Update Verified Images')
+        secondaryWindowButton.clicked.connect(self.update_verified_images)
+        layout.addWidget(secondaryWindowButton, 0, 3, 1, 1)
 
         layout.addWidget(QLabel('Directory:'), 1, 0)
         layout.addWidget(self.dir_name_edit, 1, 1, 1, 4)
@@ -78,6 +84,50 @@ class MainWindow(QMainWindow):
     def center_window(self):
         center_on_primary_screen(self)
 
+    def update_verified_images(self):
+
+        # Determine base directory (.exe dist)
+        if getattr(sys, "frozen", False):
+            self.base_path = Path(sys.executable).parent
+        else:
+            self.base_path = Path(__file__).resolve().parent
+
+        # Create dialog
+        self.counting_dialog = CountingDialog(self)
+        self.counting_dialog.show()
+
+        # Create thread + worker
+        self.thread = QThread()
+        self.worker = ImageCounterWorker(self.base_path)
+
+        self.worker.moveToThread(self.thread)
+
+        # Connect signals
+        self.thread.started.connect(self.worker.run)
+        self.worker.progress.connect(self.counting_dialog.update_count)
+        self.worker.finished.connect(self.on_verified_images_finished)
+        self.worker.error.connect(self.on_verified_images_error)
+
+        # Cleanup connections
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.error.connect(self.thread.quit)
+        self.worker.error.connect(self.worker.deleteLater)
+
+        self.thread.start()
+
+    def on_verified_images_finished(self, count, csv_path):
+        self.counting_dialog.close()
+        QMessageBox.information(
+            self,
+            "Update Complete",
+            f"Total images found: {count}\n\nCSV saved to:\n{csv_path}"
+            )
+
+    def on_verified_images_error(self, message):
+        self.counting_dialog.close()
+        QMessageBox.warning(self, "Update Failed", message)
 
     def ensure_delete_folder(self):
         # 1. Get the path from the UI and resolve it
