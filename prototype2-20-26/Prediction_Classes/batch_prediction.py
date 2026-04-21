@@ -26,7 +26,8 @@ class BatchPrediction(QMainWindow):
         self.nav_bar.set_button_visibility(
             home=False,
             update_labels=False,
-            new_folder=False
+            new_folder=False,
+            info_btn=False,
         )
         self.setMenuWidget(self.nav_bar)
 

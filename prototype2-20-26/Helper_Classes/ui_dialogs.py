@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import QMessageBox
+from html import escape
 
 
 # Confirm action (generic so we can use it in multiple files)
@@ -33,3 +34,22 @@ def show_no_images_popup(parent):
         msg.setText("This folder contains no images.\n Select a new working directory.")
         msg.setStandardButtons(QMessageBox.Ok) # type: ignore
         msg.exec()
+
+
+def show_help_dialog(parent, sections, window_title="Help"):
+    msg = QMessageBox(parent)
+    msg.setIcon(QMessageBox.Information)  # type: ignore
+    msg.setWindowTitle(window_title)
+    msg.setStandardButtons(QMessageBox.Ok)  # type: ignore
+
+    parts = []
+    for header, body in sections:
+        sec_header = escape(header)
+        sec_body = escape(body).replace("\n", "<br>")
+        parts.append(f"<p><b>{sec_header}</b><br>{sec_body}</p>")
+
+    # Key change here:
+    msg.setText("")  # keeps main text empty (no bold block)
+    msg.setInformativeText("".join(parts))  # normal-weight content
+
+    msg.exec()

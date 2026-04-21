@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 from collapsiblepane import CollapsiblePane
 import qtawesome as qta
 from Helper_Classes.label_store import LabelStore
-from Helper_Classes.ui_dialogs import confirm_action
+from Helper_Classes.ui_dialogs import confirm_action, show_help_dialog
 from Helper_Classes.nav_bar import NavBar
 
 class LabelEditor(QDialog):
@@ -39,6 +39,7 @@ class LabelEditor(QDialog):
             home=False, update_labels=False, new_folder=False, training_status=False, model_selector=False
         )
         outer_layout.addWidget(self.nav_bar)
+        self.nav_bar.infoClicked.connect(self.show_info_dialog)
 
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
@@ -358,3 +359,16 @@ class LabelEditor(QDialog):
         self.inactive_label_list.clear()
         self.load_labels()
         self.selected_label.setText("No label selected")
+
+    def show_info_dialog(self):
+        show_help_dialog(
+        self,
+        sections=[
+            (
+                "Label Editor",
+                "- Labels can be deactivated to not be included in future training\n"
+                "- Click the plus to create a new label\n"
+            )
+        ],
+        window_title="Help and Tips",
+        )
