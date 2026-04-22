@@ -38,7 +38,8 @@ class MainWindow(QMainWindow):
             update_labels=False,
             new_folder=False,
             model_selector=False,
-            training_status=False
+            training_status=False,
+            info_btn=False
         )
         self.setMenuWidget(self.nav_bar)
 

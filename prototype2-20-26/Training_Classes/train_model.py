@@ -22,7 +22,7 @@ import torch
 import qtawesome as qta
 from Training_Classes.training_config import TrainingConfig
 from Training_Classes.training_session import get_training_session
-from Helper_Classes.ui_dialogs import confirm_action
+from Helper_Classes.ui_dialogs import confirm_action, show_help_dialog
 from Helper_Classes.label_store import LabelStore
 import datetime
 import datetime
@@ -64,6 +64,7 @@ class TrainModel(QMainWindow):
         )
         self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.updateLabelsClicked.connect(self.open_label_editor)
+        self.nav_bar.infoClicked.connect(self.show_info_dialog)
 
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -307,6 +308,7 @@ class TrainModel(QMainWindow):
         }
         training_config = config_builders[config_key]()
         training_config.device = self.get_device()
+        training_config.name = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
         ok, message = self.session.start(self.drive, training_config)
         if not ok:
             QMessageBox.information(self, "Training Busy", message)
@@ -481,3 +483,18 @@ class TrainModel(QMainWindow):
         self.refresh_timer.stop()
         self._anim_timer.stop()
         event.accept()
+
+    def show_info_dialog(self):
+        show_help_dialog(
+        self,
+        sections=[
+            (
+                "Model Training Tips",
+                "- Choose a previous model to reference to make model improvements\n"
+                "- Train from scratch to make a brand new model\n"
+                "- Choose a training intensity appropriate for your hardware to improve runtime speed\n"
+                "- Do not close application during training\n"
+            )
+        ],
+        window_title="Help and Tips",
+        )

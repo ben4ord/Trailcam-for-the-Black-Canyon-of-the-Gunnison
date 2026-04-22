@@ -32,7 +32,7 @@ from Helper_Classes.verified_images_manager import TrainingManager
 from Helper_Classes.clickable_label import ClickableLabel
 from Window_Screen_Classes.label_editor import LabelEditor
 from Helper_Classes.label_store import LabelStore
-from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup
+from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup, show_help_dialog
 from Helper_Classes.window_utils import pick_directory, center_on_primary_screen
 from Helper_Classes.image_scanner import ImageScanner
 import shutil
@@ -138,6 +138,7 @@ class ImageLoader(QMainWindow):
         self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
         self.nav_bar.newBatchClicked.connect(self.start_batch_prediction)
+        self.nav_bar.infoClicked.connect(self.show_info_dialog)
         self.nav_bar.modelSelected.connect(self.on_model_selected)
         # Sync the labeler to whatever the navbar already selected during its __init__
         # (the signal fires before this connection is made, so we apply it manually).
@@ -1098,6 +1099,27 @@ class ImageLoader(QMainWindow):
             self.image_list.clear()
             self.image_label.setText("Scanning...")
             self.start_scan(self.drive)
+
+    def show_info_dialog(self):
+        show_help_dialog(
+        self,
+        sections=[
+            (
+                "Keyboard Shortcuts",
+                "- Next Image: Right Arrow ->\n"
+                "- Previous Image: Left Arrow <-\n"
+                "- Verify Image: Enter/Return\n"
+                "- Delete Image: Backspace/Delete\n"
+                "- Apply Last Verified Label: L"
+            ),
+            (
+                "Helpful Tips",
+                "You can disable prompts and popups to speed up reviewing images when relying on keyboard shortcuts.\n\n"
+                "To manually create bounding boxes, click the upper and lower corners of the box on the image and update the label in the detection editor."
+            ),
+        ],
+        window_title="Help and Tips",
+        )
 
     def menu_window(self):
         from Window_Screen_Classes.home_menu import MenuWindow

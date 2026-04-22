@@ -22,7 +22,8 @@ class MenuWindow(QMainWindow):
             home=False,
             update_labels=False,
             new_folder=True,
-            model_selector=False
+            model_selector=False,
+            info_btn=False
         )
 
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
