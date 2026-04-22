@@ -37,7 +37,11 @@ class ImageCounterWorker(QObject):
                 self.error.emit("No images found.")
                 return
 
+<<<<<<< HEAD
             csv_path = self.base_path / "test.csv"
+=======
+            csv_path = self.base_path / "verified_image_cache.csv"
+>>>>>>> b0d028ab0351adb22f3a81fecd578c4c28b0be6d
             pd.DataFrame(images_list).to_csv(csv_path, index=False)
 
             self.finished.emit(count, str(csv_path))
@@ -63,4 +67,8 @@ class CountingDialog(QDialog):
         self.resize(400, 120)
 
     def update_count(self, count):
+<<<<<<< HEAD
         self.label.setText(f"Images found so far: {count}")
+=======
+        self.label.setText(f"Images found so far: {count}")
+>>>>>>> b0d028ab0351adb22f3a81fecd578c4c28b0be6d
