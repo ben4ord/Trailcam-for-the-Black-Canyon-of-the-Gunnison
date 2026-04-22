@@ -7,6 +7,7 @@ settings.json
 verified_images/
 verified_images_test/
 verified_images_less_people/
+verified_images_old/
 reduce_people_images.py
 build/*
 select_directory.spec

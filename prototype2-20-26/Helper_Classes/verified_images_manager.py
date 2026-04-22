@@ -110,15 +110,21 @@ class TrainingManager:
 
     def generate_train_name(self, source_path):
         """Return destination path under dataset/images for given source image."""
-        source_path = Path(source_path)
+        source_path = Path(source_path).resolve()
+
+        # Already a verified copy — return as-is so the path math stays correct.
+        try:
+            source_path.relative_to(self.images_dir.resolve())
+            return source_path
+        except ValueError:
+            pass
 
         new_filename = self.build_full_path_name(source_path)
-
         return self.images_dir / new_filename
 
     def verify_image(self, source_path, label_lines=None):
         """Copy source image into dataset and write/update its YOLO label file."""
-        source_path = Path(source_path)
+        source_path = Path(source_path).resolve()
 
         destination = self.generate_train_name(source_path)
 

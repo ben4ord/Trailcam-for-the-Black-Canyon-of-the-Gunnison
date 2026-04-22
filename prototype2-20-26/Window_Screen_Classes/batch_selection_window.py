@@ -21,7 +21,8 @@ class BatchWindow(QMainWindow):
         self.nav_bar.set_button_visibility(
             home=False,
             update_labels=False,
-            new_folder=True
+            new_folder=True,
+            info_btn=False,
         )
         self.setMenuWidget(self.nav_bar)
 
@@ -47,7 +48,7 @@ class BatchWindow(QMainWindow):
         layout.addWidget(self.viewImages, 3, 0,1,3)
 
         # Add button for training new model
-        self.trainModel = QPushButton('Batch Training')
+        self.trainModel = QPushButton('Batch Prediction')
         self.trainModel.clicked.connect(self.start_batch_prediction)
         layout.addWidget(self.trainModel, 3, 4,1,3)
 

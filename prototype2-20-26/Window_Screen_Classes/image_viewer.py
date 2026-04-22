@@ -32,7 +32,7 @@ from Helper_Classes.verified_images_manager import TrainingManager
 from Helper_Classes.clickable_label import ClickableLabel
 from Window_Screen_Classes.label_editor import LabelEditor
 from Helper_Classes.label_store import LabelStore
-from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup
+from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup, show_help_dialog
 from Helper_Classes.window_utils import pick_directory, center_on_primary_screen
 from Helper_Classes.image_scanner import ImageScanner
 import shutil
@@ -77,6 +77,9 @@ class ImageLoader(QMainWindow):
         self.scanner: ImageScanner | None = None
         self.list_page_start = 0
         self.scan_complete = False
+        self.search_text: str = ""
+        self.base_filtered: list[str] = []  # filtered_images before search is applied
+        self.page_loading = False  # guard against scroll signals firing during page reload (caused the scroll to jump from 500 -> 2000 in cases)
 
         self.load_labels()
         self.current_index = 0
@@ -135,6 +138,7 @@ class ImageLoader(QMainWindow):
         self.nav_bar.updateLabelsClicked.connect(self.update_labels_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
         self.nav_bar.newBatchClicked.connect(self.start_batch_prediction)
+        self.nav_bar.infoClicked.connect(self.show_info_dialog)
         self.nav_bar.modelSelected.connect(self.on_model_selected)
         # Sync the labeler to whatever the navbar already selected during its __init__
         # (the signal fires before this connection is made, so we apply it manually).
@@ -197,6 +201,14 @@ class ImageLoader(QMainWindow):
         species_scroll.setWidgetResizable(True)
         species_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         species_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.species_unavailable_label = QLabel(
+            "This feature is only available after running Batch Prediction."
+        )
+        self.species_unavailable_label.setWordWrap(True)
+        self.species_unavailable_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.species_unavailable_label.setStyleSheet("color: gray; font-style: italic; padding: 8px;")
+        species_vbox.addWidget(self.species_unavailable_label)
+        self.species_scroll_area = species_scroll
         species_vbox.addWidget(species_scroll)
         species_vbox.addWidget(self.clear_species_btn)
         self.species_filter_group.setLayout(species_vbox)
@@ -252,7 +264,7 @@ class ImageLoader(QMainWindow):
         self.search_box.setClearButtonEnabled(True)
 
         self.scan_status_label = QLabel("")
-        self.scan_status_label.setStyleSheet("color: #8fa8c0; font-size: 11px;")
+        self.scan_status_label.setStyleSheet("color: #c8dff0; font-size: 14px; font-weight: bold; margin-left: 16px;")
 
         self.delete_button = QPushButton()
         self.delete_button.setIcon(qta.icon('fa6s.trash'))
@@ -324,13 +336,12 @@ class ImageLoader(QMainWindow):
         content_splitter.addWidget(self.left_tabs)
         content_splitter.addWidget(self.image_label)
         content_splitter.addWidget(self.image_list)
-        # Initial size ratios: left panel small, image large, list small
-        content_splitter.setStretchFactor(0, 1)
-        content_splitter.setStretchFactor(1, 5)
-        content_splitter.setStretchFactor(2, 1)
         content_splitter.setCollapsible(0, False)
         content_splitter.setCollapsible(1, False)
         content_splitter.setCollapsible(2, False)
+        # Give the image panel the majority of space on first open.
+        # setSizes uses pixel values; the splitter normalises them to fit the window.
+        content_splitter.setSizes([180, 900, 160])
 
         # -----------------------------
         # Grid: 4 columns, stretch col 2 to push search box right
@@ -351,11 +362,13 @@ class ImageLoader(QMainWindow):
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)
+        self.image_list.verticalScrollBar().valueChanged.connect(self.on_list_scroll)
         self.search_box.textChanged.connect(self.filter_list)
 
         # Populate species filter list now that widgets and labels exist
         self.populate_species_filter_list()
         self.cache_model_verified_species()
+        self.update_species_filter_availability()
 
         self.total_verified_count = self.count_images_in_dir(self.training_manager.images_dir)
         self.total_removed_count = self.count_images_in_dir(self.recently_deleted_root())
@@ -465,22 +478,25 @@ class ImageLoader(QMainWindow):
             item.setData(Qt.UserRole, image)  # type: ignore
             self.image_list.addItem(item)
 
-        # Scroll detection: when the user reaches the last item, advance the page
-        self.image_list.verticalScrollBar().valueChanged.connect(self.on_list_scroll)
-
     def on_list_scroll(self, value: int):
         """Advance or retreat the page when the user scrolls to the edge."""
+        if self.page_loading:
+            return
         sb = self.image_list.verticalScrollBar()
-        if value == sb.maximum() and not self.at_last_page():
+        if value == sb.maximum() and sb.maximum() > 0 and not self.at_last_page():
+            self.page_loading = True
             self.list_page_start += LIST_PAGE_SIZE
             self.load_image_list()
+            self.image_list.verticalScrollBar().setValue(0)
+            self.page_loading = False
         elif value == sb.minimum() and self.list_page_start > 0:
+            self.page_loading = True
             self.list_page_start = max(0, self.list_page_start - LIST_PAGE_SIZE)
             self.load_image_list()
-            # Scroll to bottom of newly loaded page so user sees continuity
             self.image_list.verticalScrollBar().setValue(
                 self.image_list.verticalScrollBar().maximum()
             )
+            self.page_loading = False
 
     def at_last_page(self) -> bool:
         return self.list_page_start + LIST_PAGE_SIZE >= len(self.filtered_images)
@@ -496,16 +512,30 @@ class ImageLoader(QMainWindow):
         return abs_index - self.list_page_start
 
     def filter_list(self, text):
-        text = text.lower()
+        self.search_text = text.lower()
 
-        for row in range(self.image_list.count()):
-            item = self.image_list.item(row)
+        if not self.search_text:
+            # Restore the pre-search list
+            if self.base_filtered:
+                self.filtered_images = list(self.base_filtered)
+                self.base_filtered = []
+        else:
+            # Snapshot current filtered_images the first time a search starts
+            if not self.base_filtered:
+                self.base_filtered = list(self.filtered_images)
+            self.filtered_images = [
+                p for p in self.base_filtered
+                if self.search_text in Path(p).name.lower()
+            ]
 
-            filename = item.text().lower()
-            #full_path = item.data(Qt.UserRole).lower()
-
-            match = text in filename
-            item.setHidden(not match)
+        self.list_page_start = 0
+        self.current_index = 0
+        self.load_image_list()
+        if self.filtered_images:
+            self.load_current_image_data()
+            self.update_display()
+        else:
+            self.image_label.setText("No images match search")
 
     def delete_image(self):
         if not self.images:
@@ -798,8 +828,7 @@ class ImageLoader(QMainWindow):
                         self.current_unverified_bgr = None
                 else:
                     self.current_unverified_bgr = None
-        if self.detections:
-            self.populate_detections(self.detections, self.active_labels)
+        self.populate_detections(self.detections, self.active_labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -1071,6 +1100,27 @@ class ImageLoader(QMainWindow):
             self.image_label.setText("Scanning...")
             self.start_scan(self.drive)
 
+    def show_info_dialog(self):
+        show_help_dialog(
+        self,
+        sections=[
+            (
+                "Keyboard Shortcuts",
+                "- Next Image: Right Arrow ->\n"
+                "- Previous Image: Left Arrow <-\n"
+                "- Verify Image: Enter/Return\n"
+                "- Delete Image: Backspace/Delete\n"
+                "- Apply Last Verified Label: L"
+            ),
+            (
+                "Helpful Tips",
+                "You can disable prompts and popups to speed up reviewing images when relying on keyboard shortcuts.\n\n"
+                "To manually create bounding boxes, click the upper and lower corners of the box on the image and update the label in the detection editor."
+            ),
+        ],
+        window_title="Help and Tips",
+        )
+
     def menu_window(self):
         from Window_Screen_Classes.home_menu import MenuWindow
         self.menuWindow = MenuWindow(self.drive)
@@ -1112,6 +1162,12 @@ class ImageLoader(QMainWindow):
 
     def apply_filter(self, mode):
         self.filter_mode = mode
+        # Clear any active search so base_filtered doesn't hold stale data
+        self.base_filtered = []
+        self.search_text = ""
+        self.search_box.blockSignals(True)
+        self.search_box.clear()
+        self.search_box.blockSignals(False)
         self.refresh_filter()
 
     def refresh_filter(self, keep_current: bool = False):
@@ -1203,6 +1259,13 @@ class ImageLoader(QMainWindow):
     # -----------------------------
     # Species filter helpers
     # -----------------------------
+    def update_species_filter_availability(self):
+        """Show or hide species filter controls based on whether batch prediction has run."""
+        has_batch_data = bool(self.model_verified)
+        self.species_unavailable_label.setVisible(not has_batch_data)
+        self.species_scroll_area.setVisible(has_batch_data)
+        self.clear_species_btn.setVisible(has_batch_data)
+
     def populate_species_filter_list(self):
         """Rebuild the species toggle-button grid from the current label set."""
         if not hasattr(self, "species_grid"):

@@ -24,6 +24,7 @@ class NavBar(QWidget):
     updateLabelsClicked = Signal()
     newFolderClicked = Signal()
     newBatchClicked = Signal()
+    infoClicked = Signal()
     modelSelected = Signal(str)  # emits full path to the selected .pt file
 
     def __init__(self, parent_window):
@@ -71,6 +72,12 @@ class NavBar(QWidget):
         self.new_batch_btn.setToolTip("New Batch Prediction")
         self.new_batch_btn.clicked.connect(self.newBatchClicked.emit)
 
+        # Info button 
+        self.info_btn = QPushButton()
+        self.info_btn.setIcon(icon('fa6s.circle-question'))
+        self.info_btn.setToolTip("Help")
+        self.info_btn.clicked.connect(self.infoClicked.emit)
+
         # Training status button
         self.training_status_btn = QPushButton("Training: Idle")
         self.training_status_btn.setToolTip("Current model training status. Click to open training window.")
@@ -94,6 +101,7 @@ class NavBar(QWidget):
         layout.addWidget(self.update_labels_btn)
         layout.addWidget(self.new_folder_btn)
         layout.addWidget(self.new_batch_btn)
+        layout.addWidget(self.info_btn)
         layout.addWidget(self.training_status_btn)
         layout.addWidget(self.model_selection_box)
         layout.addWidget(self.model_refresh_btn)
@@ -212,10 +220,11 @@ class NavBar(QWidget):
     
     # certain windows don't need all the nav bar buttons visible
     # this function allows them to decide which ones they want to see (all are true by default)
-    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, training_status=True, batch_status=False, model_selector=True):
+    def set_button_visibility(self, home=True, update_labels=True, new_folder=True, info_btn=True ,training_status=True, batch_status=False, model_selector=True):
         self.home_btn.setVisible(home)
         self.update_labels_btn.setVisible(update_labels)
         self.new_folder_btn.setVisible(new_folder)
+        self.info_btn.setVisible(info_btn)
         self.training_status_btn.setVisible(training_status)
         self.new_batch_btn.setVisible(batch_status)
         self.model_selection_box.setVisible(model_selector)

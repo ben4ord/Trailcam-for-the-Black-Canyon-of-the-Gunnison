@@ -10,12 +10,16 @@ import argparse
 import gc
 import json
 import os
-import re
+import sys
 import shutil
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import asdict
 from pathlib import Path
+
+# Ensure the project root is on sys.path so Helper_Classes and Training_Classes
+# are importable when this script is launched as a detached subprocess.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ultralytics import YOLO
 from ultralytics.nn.tasks import load_checkpoint
@@ -233,7 +237,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
         emit("debug", text="Debug: inactive_labels.txt had no resolvable class IDs.")
         return None
 
-    source_root = base_dir / "verified_images_less_people" / "dataset"
+    source_root = base_dir / "verified_images" / "dataset"
     images_dir = source_root / "images"
     labels_dir = source_root / "labels"
 
@@ -242,7 +246,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
     if not labels_dir.exists():
         raise FileNotFoundError(f"Labels dir not found: {labels_dir}")
 
-    output_root = base_dir / "verified_images_less_people" / "dataset_filtered"
+    output_root = base_dir / "verified_images" / "dataset_filtered"
     if output_root.exists():
         shutil.rmtree(output_root)
 
@@ -261,9 +265,10 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
         elapsed = max(0.001, time.time() - start_time)
         rate = current / elapsed if current else 0.0
         eta = (total - current) / rate if rate > 0 else 0.0
+        progress = max(1, int(current / total * 10000))
         emit(
             "progress",
-            progress=0,
+            progress=progress,
             status=f"Preparing dataset: {kind} {current}/{total} | ETA {eta:.1f}s",
         )
 
@@ -679,11 +684,9 @@ def main() -> int:
             models_check = (project_path / model_path).resolve()
             if models_check.exists():
                 model_path = str(models_check)
-                print(f"Resolved model path from project directory: {model_path}")
             else:
                 # Fall back to resolving from base_dir (for base models like "yolov8s.pt")
                 model_path = str((base_dir / model_path).resolve())
-                print(f"Resolved model path from base directory: {model_path}")
 
         # Route Ultralytics stdout/stderr through parser so UI can show key stages.
         with redirect_stdout(parser_stream), redirect_stderr(parser_stream):  # type: ignore
@@ -696,36 +699,44 @@ def main() -> int:
                     trainer.stop = True
 
             def on_train_batch_end(trainer):
-                # Batch updates produce smoother progress than epoch-only updates.
-                progress_tracker.emit_batch_progress(trainer)
-                if stop_requested(stop_file):
-                    trainer.stop = True
-
-            def on_train_epoch_start(trainer):
-                progress_tracker.on_epoch_start(trainer)
-                if stop_requested(stop_file):
-                    trainer.stop = True
-
-            def on_train_epoch_end(trainer):
-                progress_tracker.on_epoch_end(trainer)
-                if stop_requested(stop_file):
-                    trainer.stop = True
-
-            def on_val_start(trainer):
-                progress_tracker.on_val_start()
                 if stop_requested(stop_file):
                     trainer.stop = True
                     emit("progress", progress=0, status="Stopping training...")
+                    return
+                progress_tracker.emit_batch_progress(trainer)
+
+            def on_train_epoch_start(trainer):
+                if stop_requested(stop_file):
+                    trainer.stop = True
+                    emit("progress", progress=0, status="Stopping training...")
+                    return
+                progress_tracker.on_epoch_start(trainer)
+
+            def on_train_epoch_end(trainer):
+                if stop_requested(stop_file):
+                    trainer.stop = True
+                    emit("progress", progress=0, status="Stopping training...")
+                    return
+                progress_tracker.on_epoch_end(trainer)
+
+            def on_val_start(trainer):
+                if stop_requested(stop_file):
+                    trainer.stop = True
+                    emit("progress", progress=0, status="Stopping training...")
+                    return
+                progress_tracker.on_val_start()
 
             def on_val_batch_end(validator):
-                # validator object is passed here (not trainer) — pull batch_i from it.
+                if stop_requested(stop_file):
+                    return
                 progress_tracker.on_val_batch_progress(validator)
 
             def on_val_end(trainer):
-                progress_tracker.on_val_end()
                 if stop_requested(stop_file):
                     trainer.stop = True
                     emit("progress", progress=0, status="Stopping training...")
+                    return
+                progress_tracker.on_val_end()
 
             # Register lifecycle callbacks before invoking model.train.
             model.add_callback("on_train_start", on_train_start)
@@ -755,11 +766,11 @@ def main() -> int:
                     resumable, ckpt_epoch, ckpt_target_epochs = _checkpoint_is_resumable(model_path)
                     effective_epochs = ckpt_target_epochs if ckpt_target_epochs is not None else config.epochs
                     emit("debug", text=f"Debug: checkpoint epoch={ckpt_epoch}, target={effective_epochs}")
-                    if resumable and ckpt_epoch >= effective_epochs:
+                    if resumable and ckpt_epoch >= effective_epochs: #type: ignore
                         resume_arg = False
                         emit("log", text=f"Checkpoint has already completed {ckpt_epoch} epochs (target: {effective_epochs}). Starting fresh training from weights.")
                         emit("debug", text=f"Debug: checkpoint already finished, using as pretrained weights")
-                    elif resumable and ckpt_epoch < effective_epochs:
+                    elif resumable and ckpt_epoch < effective_epochs: #type: ignore
                         resume_arg = model_path
                         emit("debug", text=f"Debug: training will resume from checkpoint {resume_arg} (epoch {ckpt_epoch}/{effective_epochs})")
                     else:

@@ -1,10 +1,10 @@
-path: verified_images_less_people/dataset
+path: verified_images/dataset
 
 train: images
 val: images
 split: 0.1
 
-nc: 26
+nc: 24
 
 names:
   0: bighorn sheep
@@ -31,5 +31,3 @@ names:
   21: mustelid
   22: unidentified animal
   23: vehicle
-  24: crow
-  25: eagle
