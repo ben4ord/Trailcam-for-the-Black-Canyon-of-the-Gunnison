@@ -200,6 +200,14 @@ class ImageLoader(QMainWindow):
         species_scroll.setWidgetResizable(True)
         species_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         species_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.species_unavailable_label = QLabel(
+            "This feature is only available after running Batch Prediction."
+        )
+        self.species_unavailable_label.setWordWrap(True)
+        self.species_unavailable_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.species_unavailable_label.setStyleSheet("color: gray; font-style: italic; padding: 8px;")
+        species_vbox.addWidget(self.species_unavailable_label)
+        self.species_scroll_area = species_scroll
         species_vbox.addWidget(species_scroll)
         species_vbox.addWidget(self.clear_species_btn)
         self.species_filter_group.setLayout(species_vbox)
@@ -359,6 +367,7 @@ class ImageLoader(QMainWindow):
         # Populate species filter list now that widgets and labels exist
         self.populate_species_filter_list()
         self.cache_model_verified_species()
+        self.update_species_filter_availability()
 
         self.total_verified_count = self.count_images_in_dir(self.training_manager.images_dir)
         self.total_removed_count = self.count_images_in_dir(self.recently_deleted_root())
@@ -818,8 +827,7 @@ class ImageLoader(QMainWindow):
                         self.current_unverified_bgr = None
                 else:
                     self.current_unverified_bgr = None
-        if self.detections:
-            self.populate_detections(self.detections, self.active_labels)
+        self.populate_detections(self.detections, self.active_labels)
 
     def on_detection_selected(self, index):
         if index < 0 or index >= len(self.detections):
@@ -1229,6 +1237,13 @@ class ImageLoader(QMainWindow):
     # -----------------------------
     # Species filter helpers
     # -----------------------------
+    def update_species_filter_availability(self):
+        """Show or hide species filter controls based on whether batch prediction has run."""
+        has_batch_data = bool(self.model_verified)
+        self.species_unavailable_label.setVisible(not has_batch_data)
+        self.species_scroll_area.setVisible(has_batch_data)
+        self.clear_species_btn.setVisible(has_batch_data)
+
     def populate_species_filter_list(self):
         """Rebuild the species toggle-button grid from the current label set."""
         if not hasattr(self, "species_grid"):
