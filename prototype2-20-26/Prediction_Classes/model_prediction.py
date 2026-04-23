@@ -16,7 +16,7 @@ else:
     base_path = Path(__file__).resolve().parent
 
 
-DEFAULT_MODEL = str(Path(base_path / "Models" / "best.pt"))
+DEFAULT_MODEL = str(Path(base_path / "Models" / "best_3-24-2026.pt"))
 
 class ImageLabeler:
     def __init__(self, model_path: str = ""):
