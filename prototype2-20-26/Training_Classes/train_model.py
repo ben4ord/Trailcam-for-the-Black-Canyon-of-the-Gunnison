@@ -494,6 +494,7 @@ class TrainModel(QMainWindow):
                 "- Train from scratch to make a brand new model\n"
                 "- Choose a training intensity appropriate for your hardware to improve runtime speed\n"
                 "- Do not close application during training\n"
+                "- It is recommended not to run other applications on your machine during local training\n"
             )
         ],
         window_title="Help and Tips",

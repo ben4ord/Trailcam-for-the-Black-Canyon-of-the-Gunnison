@@ -237,7 +237,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
         emit("debug", text="Debug: inactive_labels.txt had no resolvable class IDs.")
         return None
 
-    source_root = base_dir / "verified_images_less_people" / "dataset"
+    source_root = base_dir / "verified_images" / "dataset"
     images_dir = source_root / "images"
     labels_dir = source_root / "labels"
 
@@ -246,7 +246,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
     if not labels_dir.exists():
         raise FileNotFoundError(f"Labels dir not found: {labels_dir}")
 
-    output_root = base_dir / "verified_images_less_people" / "dataset_filtered"
+    output_root = base_dir / "verified_images" / "dataset_filtered"
     if output_root.exists():
         shutil.rmtree(output_root)
 
@@ -621,6 +621,10 @@ def try_copy_best(run_dir: Path, base_dir: Path) -> bool:
 def parse_args():
     """CLI contract used by training_session when launching subprocess."""
     parser = argparse.ArgumentParser()
+    # Frozen app launches through main.exe first, which uses this flag to
+    # route into training_subprocess.main(). Accept it here as a harmless
+    # no-op so argparse does not reject packaged training runs.
+    parser.add_argument("--training-subprocess", action="store_true")
     parser.add_argument("--drive", required=True)
     parser.add_argument("--stop-file", required=True)
     parser.add_argument("--config-json", required=True)
