@@ -621,6 +621,10 @@ def try_copy_best(run_dir: Path, base_dir: Path) -> bool:
 def parse_args():
     """CLI contract used by training_session when launching subprocess."""
     parser = argparse.ArgumentParser()
+    # Frozen app launches through main.exe first, which uses this flag to
+    # route into training_subprocess.main(). Accept it here as a harmless
+    # no-op so argparse does not reject packaged training runs.
+    parser.add_argument("--training-subprocess", action="store_true")
     parser.add_argument("--drive", required=True)
     parser.add_argument("--stop-file", required=True)
     parser.add_argument("--config-json", required=True)

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('classes.txt', '.'), ('data.yaml', '.'), ('Models', 'Models')]
+datas = [('classes.txt', '.'), ('data.yaml', '.'), ('Models', 'Models'), ('verified_image_cache.csv', '. main.py\n\npy -m PyInstaller --onedir --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data ')]
 binaries = []
 hiddenimports = ['torch', 'torchvision']
 tmp_ret = collect_all('ultralytics')
@@ -9,7 +9,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['main.py'],
+    ['classes.txt'],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -38,7 +38,7 @@ exe = EXE(
     splash,
     [],
     exclude_binaries=True,
-    name='main',
+    name='classes',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -58,5 +58,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='main',
+    name='classes',
 )
