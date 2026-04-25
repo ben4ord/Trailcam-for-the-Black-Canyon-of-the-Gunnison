@@ -19,13 +19,14 @@ class BatchWindow(QMainWindow):
 
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
-            home=False,
+            home=True,
             update_labels=False,
             new_folder=True,
             info_btn=False,
         )
         self.setMenuWidget(self.nav_bar)
 
+        self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
         # central widget
@@ -64,6 +65,14 @@ class BatchWindow(QMainWindow):
         layout.addWidget(self.thresh_num,4,4,1,1)
         center_on_primary_screen(self)
         self.show()
+
+    def menu_window(self):
+        """Navigate back to home menu."""
+        from Window_Screen_Classes.home_menu import MenuWindow
+
+        self.menuWindow = MenuWindow(self.drive)
+        self.menuWindow.show()
+        self.close()
 
     def update_confidence(self, value: int):
         self.confidence_value = value

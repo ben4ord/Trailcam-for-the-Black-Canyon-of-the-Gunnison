@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('classes.txt', '.'), ('data.yaml', '.'), ('Models', 'Models'), ('verified_image_cache.csv', '.')]
+datas = [('classes.txt', '.'), ('data.yaml', '.'), ('Models', 'Models')]
 binaries = []
 hiddenimports = ['torch', 'torchvision']
 tmp_ret = collect_all('ultralytics')
