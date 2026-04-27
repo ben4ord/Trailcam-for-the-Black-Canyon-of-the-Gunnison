@@ -1,4 +1,13 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QSlider,QLabel,QComboBox
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QWidget,
+    QPushButton,
+    QSlider,
+    QLabel,
+    QComboBox,
+    QVBoxLayout,
+    QHBoxLayout,
+)
 from PySide6.QtCore import Qt
 
 from Window_Screen_Classes.image_viewer import ImageLoader
@@ -19,12 +28,13 @@ class ExportWindow(QMainWindow):
 
         self.nav_bar = NavBar(self)
         self.nav_bar.set_button_visibility(
-            home=False,
+            home=True,
             update_labels=False,
             new_folder=True
         )
         self.setMenuWidget(self.nav_bar)
 
+        self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
 
         # central widget
@@ -33,13 +43,21 @@ class ExportWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         
         # creating layout
-        layout = QGridLayout(central_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout = QVBoxLayout(central_widget)
+        layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(0)
-        layout.setColumnStretch(0, 1)
-        layout.setColumnStretch(4, 1)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setLayout(layout)
+
+        layout.addStretch(1)
+
+        content = QWidget()
+        content.setMaximumWidth(760)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(18)
+
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setSpacing(24)
 
         # Select time interval between photos 
         self.time_selection = QComboBox()
@@ -51,23 +69,43 @@ class ExportWindow(QMainWindow):
         self.time_selection.addItem("15 Minutes",userData=timedelta(minutes=15))
         self.time_selection.addItem("30 Minutes",userData=timedelta(minutes=30))
         self.time_selection.addItem("1 Hour",userData=timedelta(hours=1))
-        layout.addWidget(self.time_selection, 2, 2,1,2)
 
-        # Add button for training new model
-        self.exportData = QPushButton('Export Data')
-        self.exportData.clicked.connect(self.start_data_extraction)
-        layout.addWidget(self.exportData, 3, 2,1,2)
+        time_col = QVBoxLayout()
+        time_col.setSpacing(8)
+        time_label = QLabel("Time Interval")
+        time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.time_selection.setMinimumHeight(38)
+        self.time_selection.setMinimumWidth(240)
+        time_col.addWidget(time_label)
+        time_col.addWidget(self.time_selection)
+        controls_row.addLayout(time_col, 1)
 
-        # Add slider to adjust model thresh hold 
+        # Add slider to adjust model thresh hold
         self.thresh_hold_slider = QSlider(Qt.Orientation.Horizontal)
         self.thresh_hold_slider.setRange(0, 100)
-        # Label to display value 
         self.thresh_num = QLabel("Confidence Value: 0")
-        # Connect signal to slot
+        self.thresh_num.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.thresh_hold_slider.valueChanged.connect(self.update_confidence)
         self.thresh_hold_slider.setValue(0)
-        layout.addWidget(self.thresh_hold_slider,5,2,1,2)
-        layout.addWidget(self.thresh_num,4,2,1,1)
+
+        confidence_col = QVBoxLayout()
+        confidence_col.setSpacing(8)
+        confidence_col.addWidget(self.thresh_num)
+        confidence_col.addWidget(self.thresh_hold_slider)
+        controls_row.addLayout(confidence_col, 2)
+
+        content_layout.addLayout(controls_row)
+
+        # Add button for exporting data
+        self.exportData = QPushButton('Export Data')
+        self.exportData.clicked.connect(self.start_data_extraction)
+        self.exportData.setMinimumHeight(44)
+        self.exportData.setMinimumWidth(220)
+        content_layout.addWidget(self.exportData, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        layout.addWidget(content, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addStretch(1)
+
         center_on_primary_screen(self)
         self.show()
 
@@ -82,6 +120,12 @@ class ExportWindow(QMainWindow):
         self.close()
     
     def open_dir_dialog(self):
-        from window_utils import pick_directory
+        from Helper_Classes.window_utils import pick_directory
         self.drive = pick_directory(self)
+
+    def menu_window(self):
+        from Window_Screen_Classes.home_menu import MenuWindow
+        self.imageWindow = MenuWindow(self.drive)
+        self.imageWindow.show()
+        self.close()
         

@@ -8,15 +8,10 @@ import numpy as np
 import cv2
 import exifread
 from datetime import datetime
-import sys 
-# Determine base directory (.exe dist)
-if getattr(sys, "frozen", False):
-    base_path = Path(sys.executable).parent
-else:
-    base_path = Path(__file__).resolve().parent
+from Helper_Classes.app_paths import models_dir
 
 
-DEFAULT_MODEL = str(Path(base_path / "Models" / "best_3-24-2026.pt"))
+DEFAULT_MODEL = str(models_dir() / "best_3-24-2026.pt")
 
 class ImageLabeler:
     def __init__(self, model_path: str = ""):
@@ -173,4 +168,3 @@ class ImageLabeler:
             return False
         else:
             return True
-

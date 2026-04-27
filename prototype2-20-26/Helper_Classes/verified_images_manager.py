@@ -9,12 +9,9 @@ import shutil
 import re
 import csv
 import os
-import sys
-# Determine base directory (.exe dist)
-if getattr(sys, "frozen", False):
-    base_path = Path(sys.executable).parent
-else:
-    base_path = Path(__file__).resolve().parent
+from Helper_Classes.app_paths import verified_images_base_dir, verified_dataset_dir
+
+base_path = verified_images_base_dir()
 
 class TrainingManager:
     def __init__(self, root_drive):
@@ -23,7 +20,7 @@ class TrainingManager:
         # Centralized training set location beside this module.
         # This is for the executable to work properly
 
-        self.train_root = base_path / "verified_images" / "dataset"
+        self.train_root = verified_dataset_dir()
 
         self.images_dir = self.train_root / "images"
         self.labels_dir = self.train_root / "labels"

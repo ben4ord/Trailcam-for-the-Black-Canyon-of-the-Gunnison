@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
-from Helper_Classes.app_paths import app_base_dir
+from Helper_Classes.app_paths import models_dir
 from Helper_Classes.nav_bar import NavBar
 import torch
 import qtawesome as qta
@@ -71,8 +71,14 @@ class TrainModel(QMainWindow):
         layout.setSpacing(0)
         layout.addWidget(self.nav_bar)
 
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.setSpacing(12)
+        layout.addWidget(content)
+
         self.progress_label = QLabel("Ready to train")
-        layout.addWidget(self.progress_label)
+        content_layout.addWidget(self.progress_label)
 
         self.debug_label = QLabel("Debug: idle")
         self.debug_label.setWordWrap(True) # Makes sure the debug text wraps to the next line
@@ -80,42 +86,46 @@ class TrainModel(QMainWindow):
             Qt.TextInteractionFlag.TextSelectableByMouse
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
-        layout.addWidget(self.debug_label)
+        content_layout.addWidget(self.debug_label)
 
         # Progress bar for epoch tracking
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 10000)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0.0%")
-        layout.addWidget(self.progress_bar)
+        content_layout.addWidget(self.progress_bar)
 
         # Combined output terminal for log and debug messages
         self.output_view = QTextEdit()
         self.output_view.setReadOnly(True)
         self.output_view.setMaximumHeight(200)
-        layout.addWidget(self.output_view)
+        content_layout.addWidget(self.output_view)
 
         # Copy logs button
         self.copy_logs_btn = QPushButton("Copy Logs")
         self.copy_logs_btn.clicked.connect(self.copy_logs)
-        layout.addWidget(self.copy_logs_btn)
+        self.copy_logs_btn.setMinimumHeight(34)
+        content_layout.addWidget(self.copy_logs_btn)
 
         # Train Button
         self.train_btn = QPushButton("Train New Model")
         self.train_btn.clicked.connect(self.train_new_model)
+        self.train_btn.setMinimumHeight(40)
 
         # Config (intensity) selector
         config_row = QHBoxLayout()
+        config_row.setSpacing(10)
         config_row.addWidget(QLabel("Training Intensity:"))
         self.config_combo = QComboBox()
         self.config_combo.addItem("Light  (small batch, 512px) — low-end hardware", userData="small")
         self.config_combo.addItem("Medium (medium batch, 640px) — mid-range hardware", userData="medium")
         self.config_combo.addItem("Heavy  (large batch, 724px) — high-end hardware", userData="large")
         config_row.addWidget(self.config_combo)
-        layout.addLayout(config_row)
+        content_layout.addLayout(config_row)
 
         # Model Selector
         model_row = QHBoxLayout()
+        model_row.setSpacing(10)
 
         self.model_combo = QComboBox()
         self.model_combo.currentIndexChanged.connect(self.on_model_selected)
@@ -128,22 +138,24 @@ class TrainModel(QMainWindow):
         self.refresh_btn.clicked.connect(self.populate_model_dropdown)
         model_row.addWidget(self.refresh_btn)
 
-        layout.addLayout(model_row)
+        content_layout.addLayout(model_row)
 
         self.populate_model_dropdown()
 
         # Resume Button
         self.resume_btn = QPushButton("Resume Last Training")
         self.resume_btn.clicked.connect(self.resume_training)
+        self.resume_btn.setMinimumHeight(40)
 
         # Stop Button
         self.stop_btn = QPushButton("Abort Training")
         self.stop_btn.clicked.connect(self.abort_training)
         self.stop_btn.setEnabled(False)
+        self.stop_btn.setMinimumHeight(40)
 
-        layout.addWidget(self.train_btn)
-        layout.addWidget(self.resume_btn)
-        layout.addWidget(self.stop_btn)
+        content_layout.addWidget(self.train_btn)
+        content_layout.addWidget(self.resume_btn)
+        content_layout.addWidget(self.stop_btn)
 
         self.refresh_timer = QTimer(self)
         # UI polls snapshot every 500 ms to mirror subprocess state in near real time.
@@ -180,13 +192,13 @@ class TrainModel(QMainWindow):
         self.model_combo.clear()
         self.model_combo.addItem("Train from scratch", userData=None)
 
-        models_dir = str(app_base_dir() / "Models")
-        if os.path.isdir(models_dir):
-            for (root, dirs, files) in os.walk(models_dir):
+        resolved_models_dir = str(models_dir())
+        if os.path.isdir(resolved_models_dir):
+            for (root, dirs, files) in os.walk(resolved_models_dir):
                 for f in files:
                     if f.endswith(".pt"):
                         full_path = os.path.join(root,f)
-                        relative_path = os.path.relpath(full_path, start=models_dir)
+                        relative_path = os.path.relpath(full_path, start=resolved_models_dir)
                         if f != "last.pt": #ignore last.pt file
                             self.model_combo.addItem(relative_path, userData=relative_path)
         self.model_combo.blockSignals(False)
@@ -228,8 +240,8 @@ class TrainModel(QMainWindow):
         last_pt_path = os.path.join(model_dir, "last.pt")
         
         # Verify it exists relative to Models folder
-        models_dir = str(app_base_dir() / "Models")
-        full_last_pt_path = os.path.join(models_dir, last_pt_path)
+        resolved_models_dir = str(models_dir())
+        full_last_pt_path = os.path.join(resolved_models_dir, last_pt_path)
         
         if os.path.isfile(full_last_pt_path):
             return last_pt_path
