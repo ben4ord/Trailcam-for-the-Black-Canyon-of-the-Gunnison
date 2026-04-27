@@ -4,9 +4,9 @@ from PySide6.QtCore import Qt
 from Window_Screen_Classes.batch_selection_window import BatchWindow
 from Helper_Classes.nav_bar import NavBar
 from Training_Classes.train_model import TrainModel
-from Helper_Classes.window_utils import center_on_primary_screen
+from Helper_Classes.window_utils import center_on_primary_screen, ResizableMixin
 from Window_Screen_Classes.export_data_window import ExportWindow
-class MenuWindow(QMainWindow):
+class MenuWindow(ResizableMixin, QMainWindow):
     def __init__(self,drive):
         super().__init__()
         self.drive = drive

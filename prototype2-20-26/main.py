@@ -13,13 +13,13 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt,QThread
 from Window_Screen_Classes.home_menu import MenuWindow
 from Helper_Classes.nav_bar import NavBar
-from Helper_Classes.window_utils import center_on_primary_screen, pick_directory
+from Helper_Classes.window_utils import center_on_primary_screen, pick_directory, ResizableMixin
 from Helper_Classes.verified_images import ImageCounterWorker, CountingDialog
 from pathlib import Path
 import platform
 import os
 
-class MainWindow(QMainWindow):
+class MainWindow(ResizableMixin, QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -61,14 +61,12 @@ class MainWindow(QMainWindow):
         self.next_btn.clicked.connect(self.next_window)
         self.next_btn.setEnabled(False)
         layout.addWidget(self.next_btn, 0, 0, 1, 1)
-        # Add button to update verified images csv
-        self.update_verified_btn = QPushButton('Update Verified Images')
-        self.update_verified_btn.clicked.connect(self.update_verified_images)
-        layout.addWidget(self.update_verified_btn, 0, 1, 1, 2, Qt.AlignmentFlag.AlignRight)
 
         layout.addWidget(QLabel('Directory:'), 1, 0)
         layout.addWidget(self.dir_name_edit, 1, 1, 1, 2)
         layout.addWidget(dir_btn, 1, 3)
+
+        self.update_verified_images()
 
         self.show()
         self.center_window()
