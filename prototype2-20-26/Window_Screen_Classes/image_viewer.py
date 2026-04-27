@@ -280,9 +280,12 @@ class ImageLoader(QMainWindow):
 
         # Keyboard shortcuts
         QShortcut(Qt.Key_Right, self, self.next_image) # type: ignore
+        QShortcut(Qt.Key_Up, self, self.next_image) # type: ignore
         QShortcut(Qt.Key_Left, self, self.previous_image) # type: ignore
+        QShortcut(Qt.Key_Down, self, self.previous_image) # type: ignore
         QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
         QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
+        QShortcut(Qt.Key_U, self, self.unverify_image) # type: ignore
         QShortcut(Qt.Key_Backspace, self, self.delete_image) # type: ignore
         QShortcut(Qt.Key_L, self, self.apply_last_verified_label) # type: ignore
 
