@@ -259,7 +259,7 @@ class TrainModel(QMainWindow):
         # everything else (epochs, batch, imgsz) from the checkpoint's own train_args.
         config = TrainingConfig(model=last_model, device=self.get_device())
         config.resume = True
-        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+        run_name = os.path.dirname(os.path.dirname(last_model)) or datetime.datetime.now().strftime('%m-%d-%Y_%H:%M:%S')
         config.name = os.path.basename(run_name)
         ok, message = self.session.start(self.drive, config)
         if not ok:
