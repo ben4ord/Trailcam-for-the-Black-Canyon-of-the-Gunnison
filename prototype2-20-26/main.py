@@ -44,26 +44,31 @@ class MainWindow(QMainWindow):
         self.setMenuWidget(self.nav_bar)
 
         layout = QGridLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(12)
+        layout.setColumnStretch(1, 1)
 
         # directory selection
         dir_btn = QPushButton('Browse')
         dir_btn.clicked.connect(self.open_dir_dialog)
         self.dir_name_edit = QLineEdit()
+        self.dir_name_edit.setPlaceholderText("Select the directory you want to open")
+        self.dir_name_edit.textChanged.connect(self.update_next_button_state)
 
         # Add button to Next Window 
-        secondaryWindowButton = QPushButton('Next')
-        secondaryWindowButton.clicked.connect(self.next_window)
-        layout.addWidget(secondaryWindowButton, 0, 0, 1, 1)
+        self.next_btn = QPushButton('Next')
+        self.next_btn.clicked.connect(self.next_window)
+        self.next_btn.setEnabled(False)
+        layout.addWidget(self.next_btn, 0, 0, 1, 1)
         # Add button to update verified images csv
-        secondaryWindowButton = QPushButton('Update Verified Images')
-        secondaryWindowButton.clicked.connect(self.update_verified_images)
-        layout.addWidget(secondaryWindowButton, 0, 3, 1, 1)
+        self.update_verified_btn = QPushButton('Update Verified Images')
+        self.update_verified_btn.clicked.connect(self.update_verified_images)
+        layout.addWidget(self.update_verified_btn, 0, 1, 1, 2, Qt.AlignmentFlag.AlignRight)
 
         layout.addWidget(QLabel('Directory:'), 1, 0)
-        layout.addWidget(self.dir_name_edit, 1, 1, 1, 4)
-        layout.addWidget(dir_btn, 1, 5)
+        layout.addWidget(self.dir_name_edit, 1, 1, 1, 2)
+        layout.addWidget(dir_btn, 1, 3)
 
         self.show()
         self.center_window()
@@ -73,6 +78,11 @@ class MainWindow(QMainWindow):
         if dir_name:
             path = Path(dir_name)
             self.dir_name_edit.setText(str(path))
+        self.update_next_button_state()
+
+    def update_next_button_state(self):
+        has_directory = bool(self.dir_name_edit.text().strip())
+        self.next_btn.setEnabled(has_directory)
 
     def next_window(self):
         if not self.dir_name_edit.text():
@@ -87,11 +97,9 @@ class MainWindow(QMainWindow):
 
     def update_verified_images(self):
 
-        # Determine base directory (.exe dist)
-        if getattr(sys, "frozen", False):
-            self.base_path = Path(sys.executable).parent
-        else:
-            self.base_path = Path(__file__).resolve().parent
+        from Helper_Classes.app_paths import verified_images_base_dir
+
+        self.base_path = verified_images_base_dir()
 
         # Create dialog
         self.counting_dialog = CountingDialog(self)
@@ -223,6 +231,35 @@ if __name__ == '__main__':
             selection-background-color: #0078d4;
             border: 1px solid #555555;
             font-size: 13px;
+        }
+
+        /* ── Slider ── */
+        QSlider {
+            background: transparent;
+        }
+        QSlider::groove:horizontal {
+            background: #4a4a4a;
+            height: 6px;
+            border-radius: 3px;
+        }
+        QSlider::sub-page:horizontal {
+            background: #0078d4;
+            border-radius: 3px;
+        }
+        QSlider::add-page:horizontal {
+            background: #4a4a4a;
+            border-radius: 3px;
+        }
+        QSlider::handle:horizontal {
+            background: #d0d0d0;
+            width: 18px;
+            margin: -7px 0;
+            border-radius: 9px;
+            border: 1px solid #888888;
+        }
+        QSlider::handle:horizontal:hover {
+            background: #e0e0e0;
+            border-color: #a0a0a0;
         }
 
         /* ── Lists ── */

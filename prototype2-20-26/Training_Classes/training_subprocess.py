@@ -24,7 +24,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ultralytics import YOLO
 from ultralytics.nn.tasks import load_checkpoint
 
-from Helper_Classes.app_paths import app_base_dir
+from Helper_Classes.app_paths import (
+    app_base_dir,
+    data_yaml_file,
+    verified_images_dir,
+    verified_dataset_dir,
+    verified_filtered_dataset_dir,
+)
 from Training_Classes.training_config import TrainingConfig
 
 
@@ -150,14 +156,6 @@ def resolve_inactive_ids(inactive_lines: list[str], classes: list[str]) -> set[i
     return inactive_ids
 
 
-def format_path(path: Path, base_dir: Path) -> str:
-    try:
-        rel = path.relative_to(base_dir)
-        return rel.as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 def link_or_copy(src: Path, dst: Path, force_copy: bool) -> None:
     if dst.exists():
         return
@@ -176,14 +174,13 @@ def write_filtered_yaml(
     output_yaml: Path,
     output_root: Path,
     classes: list[str],
-    base_dir: Path,
 ) -> None:
     if base_yaml.exists():
         lines = base_yaml.read_text(encoding="utf-8").splitlines()
     else:
         lines = []
 
-    output_path = format_path(output_root, base_dir)
+    output_path = output_root.resolve().as_posix()
 
     replaced_path = False
     for idx, line in enumerate(lines):
@@ -225,6 +222,27 @@ def write_filtered_yaml(
     output_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_resolved_dataset_yaml(base_yaml: Path, output_yaml: Path, dataset_root: Path) -> None:
+    """Ensure the dataset YAML has a correct path field, even if the base YAML is missing or incomplete."""
+    if base_yaml.exists():
+        lines = base_yaml.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = []
+
+    output_path = dataset_root.resolve().as_posix()
+    replaced_path = False
+    for idx, line in enumerate(lines):
+        if line.startswith("path:"):
+            lines[idx] = f"path: {output_path}"
+            replaced_path = True
+            break
+    if not replaced_path:
+        lines.insert(0, f"path: {output_path}")
+
+    output_yaml.parent.mkdir(parents=True, exist_ok=True)
+    output_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
     inactive_path = base_dir / "inactive_labels.txt"
     inactive_lines = read_lines(inactive_path)
@@ -237,7 +255,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
         emit("debug", text="Debug: inactive_labels.txt had no resolvable class IDs.")
         return None
 
-    source_root = base_dir / "verified_images" / "dataset"
+    source_root = verified_dataset_dir()
     images_dir = source_root / "images"
     labels_dir = source_root / "labels"
 
@@ -246,7 +264,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
     if not labels_dir.exists():
         raise FileNotFoundError(f"Labels dir not found: {labels_dir}")
 
-    output_root = base_dir / "verified_images" / "dataset_filtered"
+    output_root = verified_filtered_dataset_dir()
     if output_root.exists():
         shutil.rmtree(output_root)
 
@@ -328,7 +346,7 @@ def prepare_filtered_dataset(base_dir: Path, base_yaml: Path) -> Path | None:
             emit_progress("images", idx, total_images)
 
     output_yaml = output_root / "data.yaml"
-    write_filtered_yaml(base_yaml, output_yaml, output_root, classes, base_dir)
+    write_filtered_yaml(base_yaml, output_yaml, output_root, classes)
     emit("debug", text=f"Debug: filtered dataset ready at {output_root}")
     emit("debug", text=f"Debug: inactive class IDs: {sorted(inactive_ids)}")
     return output_yaml
@@ -657,7 +675,7 @@ def main() -> int:
         data_path = Path(args.drive) / "data.yaml"
         if not data_path.exists():
             # Fallback supports packaged app runs where dataset yaml lives by app.
-            fallback = base_dir / "data.yaml"
+            fallback = data_yaml_file()
             if fallback.exists():
                 data_path = fallback
             else:
@@ -668,6 +686,10 @@ def main() -> int:
         filtered_yaml = prepare_filtered_dataset(base_dir, data_path)
         if filtered_yaml is not None:
             data_path = filtered_yaml
+        else:
+            resolved_yaml = verified_images_dir() / "runtime_data.yaml"
+            write_resolved_dataset_yaml(data_path, resolved_yaml, verified_dataset_dir())
+            data_path = resolved_yaml
 
         project_path = Path(config.project)
         if not project_path.is_absolute():
@@ -684,12 +706,10 @@ def main() -> int:
         # Resolve model path: if relative, try Models/ first (for checkpoints), then base_dir.
         model_path = config.model
         if model_path and not Path(model_path).is_absolute():
-            # First check if it's a checkpoint in Models/ (e.g., "experiment6/weights/best.pt")
             models_check = (project_path / model_path).resolve()
             if models_check.exists():
                 model_path = str(models_check)
             else:
-                # Fall back to resolving from base_dir (for base models like "yolov8s.pt")
                 model_path = str((base_dir / model_path).resolve())
 
         # Route Ultralytics stdout/stderr through parser so UI can show key stages.

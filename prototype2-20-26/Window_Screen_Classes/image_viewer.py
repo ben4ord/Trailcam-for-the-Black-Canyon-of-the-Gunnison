@@ -170,6 +170,7 @@ class ImageLoader(QMainWindow):
 
         # Filter dropdown
         self.filter_dropdown = QComboBox()
+        self.filter_dropdown.setMinimumWidth(260)
         self.filter_dropdown.addItems([
             "All Images",
             "Verified Only",
@@ -326,8 +327,8 @@ class ImageLoader(QMainWindow):
         bottom_layout.addWidget(self.delete_button)
         bottom_layout.addStretch()
         bottom_layout.addWidget(self.verification_status)
-        bottom_layout.addWidget(self.verify_image)
         bottom_layout.addWidget(self.unverify_image_btn)
+        bottom_layout.addWidget(self.verify_image)
         bottom_layout.addStretch()
         bottom_layout.addWidget(self.nextImage)
 
@@ -346,22 +347,28 @@ class ImageLoader(QMainWindow):
         # setSizes uses pixel values; the splitter normalises them to fit the window.
         content_splitter.setSizes([180, 900, 160])
 
+        content_widget = QWidget()
+        content_layout = QGridLayout(content_widget)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        content_layout.setSpacing(8)
+
         # -----------------------------
         # Grid: 4 columns, stretch col 2 to push search box right
         # -----------------------------
-        layout.setColumnStretch(2, 1)
-        layout.setRowStretch(2, 1)  # splitter row expands
-        # Nav Bar
-        layout.addWidget(self.nav_bar, 0, 0, 1, 4)
+        content_layout.setColumnStretch(2, 1)
+        content_layout.setRowStretch(1, 1)  # splitter row expands
         # Controls row
-        layout.addWidget(self.filter_dropdown, 1, 0)
-        layout.addWidget(self.confirm_toggle, 1, 1)
-        layout.addWidget(self.scan_status_label, 1, 2)
-        layout.addWidget(self.search_box, 1, 3)
+        content_layout.addWidget(self.filter_dropdown, 0, 0)
+        content_layout.addWidget(self.confirm_toggle, 0, 1)
+        content_layout.addWidget(self.scan_status_label, 0, 2)
+        content_layout.addWidget(self.search_box, 0, 3)
         # Content splitter
-        layout.addWidget(content_splitter, 2, 0, 1, 4)
+        content_layout.addWidget(content_splitter, 1, 0, 1, 4)
         # Bottom bar
-        layout.addWidget(bottom_bar, 3, 0, 1, 4)
+        content_layout.addWidget(bottom_bar, 2, 0, 1, 4)
+
+        layout.addWidget(self.nav_bar, 0, 0)
+        layout.addWidget(content_widget, 1, 0)
 
         # Image list button assignments
         self.image_list.itemClicked.connect(self.on_list_item_clicked)

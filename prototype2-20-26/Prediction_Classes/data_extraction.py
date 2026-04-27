@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from Helper_Classes.label_store import LabelStore
 from pathlib import PureWindowsPath
 from time import perf_counter
+import re
 
 
 class DataExtraction(QMainWindow):
@@ -160,8 +161,7 @@ class DataExtraction(QMainWindow):
 
     def extract_data(self):
         self.detections = []
-        self.last_image_time = None
-        self.last_camera_site = None
+        self.last_image_time_by_site = {}
         image_counter = 0
         estimated_time_remaining = "Calculating..."
 
@@ -173,6 +173,9 @@ class DataExtraction(QMainWindow):
         self.load_labels() 
         self.start_time = perf_counter()     
         for root, dirs, files in os.walk(self.drive):
+            # sort for more stable traversals 
+            dirs.sort()
+            files.sort()
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
                     # Get the full path of the file
@@ -183,16 +186,14 @@ class DataExtraction(QMainWindow):
                         return
                     dt_obj,img_date, img_time = self.labeler.get_date_time(file_path)
                     camera_site = self.get_camera_site(file_path)
-
-                    if camera_site != self.last_camera_site:
-                        self.last_camera_site = camera_site # Change last camera site to current camera site
-                        self.last_image_time = None # reset last image time when camera site changes
+                    site_key = camera_site or str(PureWindowsPath(file_path).parent)
                     
                     if dt_obj and img_date and img_time:
+                        last_image_time = self.last_image_time_by_site.get(site_key)
 
                         # Check if the image time is within the specified period
-                        if self.last_image_time == None or (dt_obj - self.last_image_time) >= self.image_time_period:
-                            self.last_image_time = dt_obj
+                        if last_image_time is None or (dt_obj - last_image_time) >= self.image_time_period:
+                            self.last_image_time_by_site[site_key] = dt_obj
                             detections = self.labeler.get_extraction_animal_data(file_path)
                             if detections:
                                 total_animals = len(detections['class_ids'])
@@ -268,10 +269,15 @@ class DataExtraction(QMainWindow):
     def get_camera_site(self,file_path: str) -> str | None:
         """
         Extracts the camera site from a file path.
-        The camera site is the folder immediately after 'GGNCA'."""
+        Prefers folders that look like site IDs (for example 'R-15')
+        anywhere after 'GGNCA'."""
         parts = PureWindowsPath(file_path).parts
+        site_pattern = re.compile(r"^[A-Za-z]+-\d+[A-Za-z]?$")
         for i, part in enumerate(parts):
             if part.upper() == "GGNCA" and i + 1 < len(parts):
+                for candidate in parts[i + 1:]:
+                    if site_pattern.match(candidate):
+                        return candidate
                 return parts[i + 1]
         return None
     

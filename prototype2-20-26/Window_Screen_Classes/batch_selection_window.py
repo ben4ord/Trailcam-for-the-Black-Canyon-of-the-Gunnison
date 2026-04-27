@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QSlider,QLabel
+from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton, QSlider, QLabel
 from PySide6.QtCore import Qt
 
 from Window_Screen_Classes.image_viewer import ImageLoader
@@ -36,33 +36,36 @@ class BatchWindow(QMainWindow):
         
         # creating layout
         layout = QGridLayout(central_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(12)
         layout.setColumnStretch(0, 1)
-        layout.setColumnStretch(4, 1)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setColumnStretch(1, 1)
+        layout.setRowStretch(0, 2)
+        layout.setRowStretch(5, 2)
         self.setLayout(layout)
         
         # Add button to next window
         self.viewImages = QPushButton('View Images')
         self.viewImages.clicked.connect(self.view_image_window)
-        layout.addWidget(self.viewImages, 3, 0,1,3)
+        layout.addWidget(self.viewImages, 1, 0)
 
         # Add button for training new model
         self.trainModel = QPushButton('Batch Prediction')
         self.trainModel.clicked.connect(self.start_batch_prediction)
-        layout.addWidget(self.trainModel, 3, 4,1,3)
+        layout.addWidget(self.trainModel, 1, 1)
 
         # Add slider to adjust model thresh hold 
         self.thresh_hold_slider = QSlider(Qt.Orientation.Horizontal)
         self.thresh_hold_slider.setRange(0, 100)
         # Label to display value 
         self.thresh_num = QLabel("Confidence Value: 0")
+        self.thresh_num.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         # Connect signal to slot
         self.thresh_hold_slider.valueChanged.connect(self.update_confidence)
         self.thresh_hold_slider.setValue(0)
-        layout.addWidget(self.thresh_hold_slider,5,4,1,2)
-        layout.addWidget(self.thresh_num,4,4,1,1)
+        layout.addWidget(self.thresh_num, 3, 1)
+        layout.addWidget(self.thresh_hold_slider, 4, 1)
         center_on_primary_screen(self)
         self.show()
 
@@ -91,4 +94,11 @@ class BatchWindow(QMainWindow):
     def open_dir_dialog(self):
         from Helper_Classes.window_utils import pick_directory
         self.drive = pick_directory(self)
+
+    def menu_window(self):
+        from Window_Screen_Classes.home_menu import MenuWindow
+
+        self.imageWindow = MenuWindow(self.drive)
+        self.imageWindow.show()
+        self.close()
         
