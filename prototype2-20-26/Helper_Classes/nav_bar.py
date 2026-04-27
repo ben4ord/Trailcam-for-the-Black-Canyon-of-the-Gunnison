@@ -2,20 +2,12 @@ from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout, QComboBox
 from PySide6.QtCore import Qt, QEvent, QPoint, Signal, QTimer
 import qtawesome as qta
 import os
-import sys
-from pathlib import Path
-# Determine base directory (.exe dist)
-if getattr(sys, "frozen", False):
-    base_path = Path(sys.executable).parent
-else:
-    base_path = Path(__file__).resolve().parent
-
-MODELS_DIR = base_path / "Models"
 
 def icon(name: str):
     """Return a qtawesome icon forced to white regardless of system theme."""
     return qta.icon(name, color='white')  # type: ignore[call-arg]
 from Training_Classes.training_session import get_training_session
+from Helper_Classes.app_paths import models_dir
 from Helper_Classes.model_selection_state import get_model_selection_state
 
 
@@ -310,13 +302,14 @@ class NavBar(QWidget):
         """Populate available checkpoint files from the project-level `Models/` folder."""
         self.model_selection_box.blockSignals(True)
         self.model_selection_box.clear()
+        resolved_models_dir = models_dir()
 
-        if os.path.isdir(MODELS_DIR):
-            for root, _dirs, files in os.walk(MODELS_DIR):
+        if os.path.isdir(resolved_models_dir):
+            for root, _dirs, files in os.walk(resolved_models_dir):
                 for f in sorted(files):
                     if f.endswith(".pt") and f != "last.pt":
                         full_path = os.path.normpath(os.path.join(root, f))
-                        display = os.path.relpath(full_path, start=MODELS_DIR)
+                        display = os.path.relpath(full_path, start=resolved_models_dir)
                         self.model_selection_box.addItem(display, userData=full_path)
 
         self.model_selection_box.blockSignals(False)

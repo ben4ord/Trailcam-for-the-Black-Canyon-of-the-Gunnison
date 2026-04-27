@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QMessageBox, QProgressBar, QLabel, QHBoxLayout, QComboBox
 )
 
-from Helper_Classes.app_paths import app_base_dir
+from Helper_Classes.app_paths import models_dir
 from Helper_Classes.nav_bar import NavBar
 import torch
 import qtawesome as qta
@@ -180,13 +180,13 @@ class TrainModel(QMainWindow):
         self.model_combo.clear()
         self.model_combo.addItem("Train from scratch", userData=None)
 
-        models_dir = str(app_base_dir() / "Models")
-        if os.path.isdir(models_dir):
-            for (root, dirs, files) in os.walk(models_dir):
+        resolved_models_dir = str(models_dir())
+        if os.path.isdir(resolved_models_dir):
+            for (root, dirs, files) in os.walk(resolved_models_dir):
                 for f in files:
                     if f.endswith(".pt"):
                         full_path = os.path.join(root,f)
-                        relative_path = os.path.relpath(full_path, start=models_dir)
+                        relative_path = os.path.relpath(full_path, start=resolved_models_dir)
                         if f != "last.pt": #ignore last.pt file
                             self.model_combo.addItem(relative_path, userData=relative_path)
         self.model_combo.blockSignals(False)
@@ -228,8 +228,8 @@ class TrainModel(QMainWindow):
         last_pt_path = os.path.join(model_dir, "last.pt")
         
         # Verify it exists relative to Models folder
-        models_dir = str(app_base_dir() / "Models")
-        full_last_pt_path = os.path.join(models_dir, last_pt_path)
+        resolved_models_dir = str(models_dir())
+        full_last_pt_path = os.path.join(resolved_models_dir, last_pt_path)
         
         if os.path.isfile(full_last_pt_path):
             return last_pt_path

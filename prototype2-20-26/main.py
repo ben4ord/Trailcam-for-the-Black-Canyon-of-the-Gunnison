@@ -87,11 +87,9 @@ class MainWindow(QMainWindow):
 
     def update_verified_images(self):
 
-        # Determine base directory (.exe dist)
-        if getattr(sys, "frozen", False):
-            self.base_path = Path(sys.executable).parent
-        else:
-            self.base_path = Path(__file__).resolve().parent
+        from Helper_Classes.app_paths import verified_images_base_dir
+
+        self.base_path = verified_images_base_dir()
 
         # Create dialog
         self.counting_dialog = CountingDialog(self)
