@@ -3,6 +3,12 @@ import sys
 
 
 def app_base_dir() -> Path:
+    if sys.platform != "darwin":
+        # Determine base directory (.exe dist)
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).parent
+        else:
+            return Path(__file__).resolve().parent
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
