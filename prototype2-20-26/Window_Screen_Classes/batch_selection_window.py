@@ -69,6 +69,14 @@ class BatchWindow(QMainWindow):
         center_on_primary_screen(self)
         self.show()
 
+    def menu_window(self):
+        """Navigate back to home menu."""
+        from Window_Screen_Classes.home_menu import MenuWindow
+
+        self.menuWindow = MenuWindow(self.drive)
+        self.menuWindow.show()
+        self.close()
+
     def update_confidence(self, value: int):
         self.confidence_value = value
         self.thresh_num.setText(f"Confidence Value: {value}")
