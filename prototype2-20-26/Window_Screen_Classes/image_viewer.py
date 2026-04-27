@@ -387,8 +387,7 @@ class ImageLoader(ResizableMixin, QMainWindow):
         # Kick off background scan — first batch triggers the initial display
         self.start_scan(self.drive)
 
-        self.center_window()
-        self.show()
+        self.showMaximized()
 
     # Center the window when they open it
     def center_window(self):
