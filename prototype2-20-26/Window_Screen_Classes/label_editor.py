@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from pathlib import Path
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from collapsiblepane import CollapsiblePane
 import qtawesome as qta
 from Helper_Classes.label_store import LabelStore
@@ -44,9 +44,11 @@ class LabelEditor(QDialog):
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setAlignment(Qt.AlignTop) # type: ignore
         outer_layout.addWidget(content_widget, stretch=1)
 
         layout = QHBoxLayout()
+        layout.setAlignment(Qt.AlignTop) # type: ignore
         content_layout.addLayout(layout)
 
         # -----------------------------
@@ -67,30 +69,54 @@ class LabelEditor(QDialog):
 
         self.active_labels.set_content_widget(self.active_label_list)
         self.active_labels.set_header_style(
-            background_color="#00FFBB",  # Green header
-            text_color="#000",         # White text for contrast
-            border_color="#00FFBB",      # Darker green border
-            border_width=2,
+            background_color="#233241",
+            text_color="#f3f6fb",
+            border_color="#35516c",
+            border_width=1,
+            border_radius=10,
+            padding_vertical=6,
+            padding_horizontal=8,
             font_size=16,
             font_weight="bold",
-            hover_color="#00E0A6"        # Lighter green hover
+            hover_color="#2a3b4d"
         )
+        self.active_labels.set_card_style(
+            background="#1f1f1f",
+            border="#4a4a4a",
+            radius=8,
+            padding=0,
+        )
+        self.active_labels.set_content_text_style(color="#e5e5e5", font_size=13)
 
         self.inactive_labels.set_content_widget(self.inactive_label_list)
         self.inactive_labels.set_header_style(
-            background_color="#FFBB00",  # Green header
-            text_color="#000",         # White text for contrast
-            border_color="#FFBB00",      # Darker green border
-            border_width=2,
+            background_color="#3a3121",
+            text_color="#f4ead2",
+            border_color="#7a6226",
+            border_width=1,
+            border_radius=10,
+            padding_vertical=6,
+            padding_horizontal=8,
             font_size=16,
             font_weight="bold",
-            hover_color="#E0A600"        # Lighter green hover
+            hover_color="#4a3f27"
         )
+        self.inactive_labels.set_card_style(
+            background="#1f1f1f",
+            border="#4a4a4a",
+            radius=8,
+            padding=0,
+        )
+        self.inactive_labels.set_content_text_style(color="#e5e5e5", font_size=13)
+
+        self.active_labels.toggled.connect(lambda _expanded: self.sync_pane_geometry())
+        self.inactive_labels.toggled.connect(lambda _expanded: self.sync_pane_geometry())
         
         left_panel.addWidget(self.search_box)
         left_panel.addWidget(self.active_labels)
         left_panel.addWidget(self.inactive_labels)
         left_panel.setContentsMargins(0,0,0,0)
+        left_panel.setSpacing(8)
 
         # -----------------------------
         # Right Panel
@@ -194,6 +220,20 @@ class LabelEditor(QDialog):
         self.edit_confirm_button.clicked.connect(self.confirm_edit)
         self.deactivate_button.setEnabled(False)
         self.edit_button.setEnabled(False)
+        self.sync_pane_geometry()
+
+    def sync_pane_geometry(self):
+        def _apply():
+            for pane in (self.active_labels, self.inactive_labels):
+                collapsed_height = pane.header_frame.sizeHint().height()
+                if getattr(pane, "_expanded", False):
+                    pane.setMinimumHeight(0)
+                else:
+                    pane.setMinimumHeight(collapsed_height)
+                    pane.setMaximumHeight(collapsed_height)
+                pane.updateGeometry()
+
+        QTimer.singleShot(170, _apply)
 
     # -----------------------------
     # Label Functions
@@ -207,15 +247,15 @@ class LabelEditor(QDialog):
                 active_count += 1
         self.active_labels.set_item_count(active_count)
         self.active_labels.set_item_badge_style(
-            bg_color="#ffd6e0",
-            text_color="#e91e63",
-            border_color="#ff80ab",
+            bg_color="#2f4961",
+            text_color="#e4f1ff",
+            border_color="#4f7597",
             border_radius=12,
             padding_vertical=4,
             padding_horizontal=12,
             font_size=12,
             font_weight="bold",
-            shadow=True,
+            shadow=False,
             min_width=40
         )
 
@@ -226,15 +266,15 @@ class LabelEditor(QDialog):
                 inactive_count += 1
         self.inactive_labels.set_item_count(inactive_count)
         self.inactive_labels.set_item_badge_style(
-            bg_color="#ffd6e0",
-            text_color="#e91e63",
-            border_color="#ff80ab",
+            bg_color="#5a4720",
+            text_color="#ffe8a3",
+            border_color="#9a7d34",
             border_radius=12,
             padding_vertical=4,
             padding_horizontal=12,
             font_size=12,
             font_weight="bold",
-            shadow=True,
+            shadow=False,
             min_width=40
         )
 

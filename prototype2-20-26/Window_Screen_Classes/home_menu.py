@@ -31,29 +31,36 @@ class MenuWindow(QMainWindow):
         # central widget
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
-        
-        # creating layout
-        layout = QGridLayout(central_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        self.setLayout(layout)
 
-        layout.addWidget(self.nav_bar, 0, 0, 1, 6)
-        
+        # create layout
+        outer_layout = QGridLayout(central_widget)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        self.setLayout(outer_layout)
+
+        content_widget = QWidget()
+        layout = QGridLayout(content_widget)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setVerticalSpacing(12)
+        layout.setHorizontalSpacing(10)
+
+        outer_layout.addWidget(self.nav_bar, 0, 0)
+        outer_layout.addWidget(content_widget, 1, 0)
+
         # Add button to next window
         self.viewImages = QPushButton('View Images')
         self.viewImages.clicked.connect(self.batch_selection_window)
-        layout.addWidget(self.viewImages, 1, 0, 2, 6)
+        layout.addWidget(self.viewImages, 0, 0, 1, 6)
 
         # Add button for training new model
         self.trainModel = QPushButton('Train Model')
         self.trainModel.clicked.connect(self.train_model_window)
-        layout.addWidget(self.trainModel, 2, 0, 2, 6)
+        layout.addWidget(self.trainModel, 1, 0, 1, 6)
 
         # Export CSV with population data
         self.exportData = QPushButton('Export Data')
         self.exportData.clicked.connect(self.export_animal_data)
-        layout.addWidget(self.exportData, 3, 0, 2, 6)
+        layout.addWidget(self.exportData, 2, 0, 1, 6)
 
         center_on_primary_screen(self)
         self.show()
