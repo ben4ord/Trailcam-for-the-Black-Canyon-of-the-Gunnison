@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt
 from Window_Screen_Classes.image_viewer import ImageLoader
 from Helper_Classes.nav_bar import NavBar
 from Helper_Classes.window_utils import center_on_primary_screen
+from Helper_Classes.ui_dialogs import show_help_dialog
 from Prediction_Classes.data_extraction import DataExtraction
 from datetime import datetime, timedelta
 class ExportWindow(QMainWindow):
@@ -36,6 +37,7 @@ class ExportWindow(QMainWindow):
 
         self.nav_bar.homeClicked.connect(self.menu_window)
         self.nav_bar.newFolderClicked.connect(self.open_dir_dialog)
+        self.nav_bar.infoClicked.connect(self.show_info_dialog)
 
         # central widget
         central_widget = QWidget(self)
@@ -128,4 +130,18 @@ class ExportWindow(QMainWindow):
         self.imageWindow = MenuWindow(self.drive)
         self.imageWindow.show()
         self.close()
+
+    def show_info_dialog(self):
+        show_help_dialog(
+        self,
+        sections=[
+            (
+                "Data Export Tips",
+                "- Select a time interval to specify the frequency of image extraction\n"
+                "- A confidence value of zero will include all model predictions\n"
+                "- Decreasing the time interval will increase the processing time\n"
+            ),
+        ],
+        window_title="Help and Tips",
+        )
         
