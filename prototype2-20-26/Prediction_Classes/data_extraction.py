@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from sympy import root
 from Helper_Classes.nav_bar import NavBar
-from Helper_Classes.window_utils import center_on_primary_screen
+from Helper_Classes.window_utils import center_on_primary_screen, ResizableMixin
 from Prediction_Classes.model_prediction import ImageLabeler
 import pandas as pd
 from datetime import datetime, timedelta
@@ -24,7 +24,7 @@ from time import perf_counter
 import re
 
 
-class DataExtraction(QMainWindow):
+class DataExtraction(ResizableMixin, QMainWindow):
     def __init__(self,drive,confidence_value,in_image_viewer=False,image_time_period=None):
         super().__init__()
         self.drive = drive

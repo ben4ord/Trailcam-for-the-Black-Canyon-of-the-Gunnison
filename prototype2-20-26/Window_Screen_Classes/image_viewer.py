@@ -33,13 +33,13 @@ from Helper_Classes.clickable_label import ClickableLabel
 from Window_Screen_Classes.label_editor import LabelEditor
 from Helper_Classes.label_store import LabelStore
 from Helper_Classes.ui_dialogs import confirm_action, show_info, show_no_images_popup, show_help_dialog
-from Helper_Classes.window_utils import pick_directory, center_on_primary_screen
+from Helper_Classes.window_utils import pick_directory, center_on_primary_screen, ResizableMixin
 from Helper_Classes.image_scanner import ImageScanner
 import shutil
 
 LIST_PAGE_SIZE = 500
 
-class ImageLoader(QMainWindow):
+class ImageLoader(ResizableMixin, QMainWindow):
     def __init__(self, drive,model_verified=None,model_discarded=None):
         super().__init__()
 
@@ -281,9 +281,12 @@ class ImageLoader(QMainWindow):
 
         # Keyboard shortcuts
         QShortcut(Qt.Key_Right, self, self.next_image) # type: ignore
+        QShortcut(Qt.Key_Down, self, self.next_image) # type: ignore
         QShortcut(Qt.Key_Left, self, self.previous_image) # type: ignore
+        QShortcut(Qt.Key_Up, self, self.previous_image) # type: ignore
         QShortcut(Qt.Key_Return, self, self.mark_verified) # type: ignore
         QShortcut(Qt.Key_Enter, self, self.mark_verified) # type: ignore
+        QShortcut(Qt.Key_U, self, self.unverify_image) # type: ignore
         QShortcut(Qt.Key_Backspace, self, self.delete_image) # type: ignore
         QShortcut(Qt.Key_L, self, self.apply_last_verified_label) # type: ignore
 
@@ -384,8 +387,7 @@ class ImageLoader(QMainWindow):
         # Kick off background scan — first batch triggers the initial display
         self.start_scan(self.drive)
 
-        self.center_window()
-        self.show()
+        self.showMaximized()
 
     # Center the window when they open it
     def center_window(self):
@@ -401,7 +403,7 @@ class ImageLoader(QMainWindow):
         self.filtered_images.clear()
         self.list_page_start = 0
         self.scan_complete = False
-        self.scan_status_label.setText("Scanning…")
+        self.scan_status_label.setText("Scanning...")
 
         self.species_filter_group.setEnabled(False)
         self.species_filter_group.setToolTip("Species filter is available after scanning completes.")
@@ -420,7 +422,7 @@ class ImageLoader(QMainWindow):
     def on_scan_batch(self, batch: list):
         was_empty = len(self.images) == 0
         self.images.extend(batch)
-        self.scan_status_label.setText(f"Scanning… {len(self.images):,} found")
+        self.scan_status_label.setText(f"Scanning... {len(self.images):,} found in selected directory")
 
         # Extend filtered_images incrementally instead of rebuilding the whole
         # list on every batch — rebuilding becomes O(n²) over 1.7M images.
@@ -452,7 +454,7 @@ class ImageLoader(QMainWindow):
 
     def on_scan_done(self, total: int):
         self.scan_complete = True
-        self.scan_status_label.setText(f"{total:,} images")
+        self.scan_status_label.setText(f"{total:,} images in selected directory")
         self.species_filter_group.setEnabled(True)
         self.species_filter_group.setToolTip("")
         self.load_image_list()
@@ -1113,9 +1115,10 @@ class ImageLoader(QMainWindow):
         sections=[
             (
                 "Keyboard Shortcuts",
-                "- Next Image: Right Arrow ->\n"
-                "- Previous Image: Left Arrow <-\n"
+                "- Next Image: Right Arrow → / Down Arrow ↓\n"
+                "- Previous Image: Left Arrow ← / Up Arrow ↑\n"
                 "- Verify Image: Enter/Return\n"
+                "- Unverify Image: U\n"
                 "- Delete Image: Backspace/Delete\n"
                 "- Apply Last Verified Label: L"
             ),
@@ -1286,7 +1289,7 @@ class ImageLoader(QMainWindow):
         self.species_filter &= set(self.active_labels)
 
         cols = 5
-        for i, label in enumerate(self.active_labels):
+        for i, label in enumerate(sorted(self.active_labels, key=str.casefold)):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.blockSignals(True)

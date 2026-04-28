@@ -17,8 +17,9 @@ import qtawesome as qta
 from Helper_Classes.label_store import LabelStore
 from Helper_Classes.ui_dialogs import confirm_action, show_help_dialog
 from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import ResizableMixin
 
-class LabelEditor(QDialog):
+class LabelEditor(ResizableMixin, QDialog):
     def __init__(self, parent=None):
         super().__init__()
         self.path = Path.cwd() / "classes.txt"

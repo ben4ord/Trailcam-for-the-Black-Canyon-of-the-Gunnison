@@ -4,9 +4,9 @@ from PySide6.QtCore import Qt
 from Window_Screen_Classes.image_viewer import ImageLoader
 from Helper_Classes.nav_bar import NavBar
 from Prediction_Classes.batch_prediction import BatchPrediction
-from Helper_Classes.window_utils import center_on_primary_screen
+from Helper_Classes.window_utils import center_on_primary_screen, ResizableMixin
 
-class BatchWindow(QMainWindow):
+class BatchWindow(ResizableMixin, QMainWindow):
     def __init__(self,drive):
         super().__init__()
         self.drive = drive
@@ -94,11 +94,4 @@ class BatchWindow(QMainWindow):
     def open_dir_dialog(self):
         from Helper_Classes.window_utils import pick_directory
         self.drive = pick_directory(self)
-
-    def menu_window(self):
-        from Window_Screen_Classes.home_menu import MenuWindow
-
-        self.imageWindow = MenuWindow(self.drive)
-        self.imageWindow.show()
-        self.close()
         

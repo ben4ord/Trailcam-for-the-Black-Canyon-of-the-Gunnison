@@ -2,10 +2,10 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QGridLayout, QPushButton,QPr
 from PySide6.QtCore import Qt,QTimer
 import os
 from Helper_Classes.nav_bar import NavBar
-from Helper_Classes.window_utils import center_on_primary_screen
+from Helper_Classes.window_utils import center_on_primary_screen, ResizableMixin
 from Prediction_Classes.model_prediction import ImageLabeler
 
-class BatchPrediction(QMainWindow):
+class BatchPrediction(ResizableMixin, QMainWindow):
     def __init__(self, drive, confidence_value, in_image_viewer=False, model_path=""):
         super().__init__()
         self.drive = drive

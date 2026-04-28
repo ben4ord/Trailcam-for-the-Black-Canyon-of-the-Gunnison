@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from Helper_Classes.app_paths import models_dir
 from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import ResizableMixin
 import torch
 import qtawesome as qta
 from Training_Classes.training_config import TrainingConfig
@@ -28,7 +29,7 @@ import datetime
 import datetime
 
 
-class TrainModel(QMainWindow):
+class TrainModel(ResizableMixin, QMainWindow):
     def __init__(self,drive):
         super().__init__()
         self.drive = drive
