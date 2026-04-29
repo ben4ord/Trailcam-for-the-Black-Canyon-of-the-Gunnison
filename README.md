@@ -46,9 +46,9 @@ The primary objective of this application is to extract animal population statis
 ### 1. Create a Virtual Environment
 
 Create and activate a new virtual environment, then install all required pip packages listed in `pipInstalls.txt`.
-pip install -r pipInstalls.txt
+- pip install -r pipInstalls.txt
 You may need this extra install for Torch to work properly with a GPU 
-pip install -r pipInstalls.txt --extra-index-url https://download.pytorch.org/whl/cu121
+- pip install -r pipInstalls.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 ### 2. Navigate to the Project Directory
 
@@ -57,8 +57,7 @@ cd BCG-Vision
 ### 3. Run PyInstaller
 
 ### Windows 
-py -m PyInstaller --onedir --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data "classes.txt;." --add-data "data.yaml;." --add-data "Models;Models" --name "BCG-Vision" --icon=bcg_icon.ico main.pypy -m PyInstaller --onedir --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data "classes.txt;." --add-data "data.yaml;." --add-data "Models;Models" --name "BCG-Vision" --icon=bcg_icon.ico main.py
-
+py -m PyInstaller --onedir --windowed --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data "classes.txt;." --add-data "data.yaml;." --add-data "Models;Models" --name "BCG-Vision" --icon=bcg_icon.ico main.py
 ### Mac 
 python3 -m PyInstaller \
 --onedir \
