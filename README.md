@@ -76,10 +76,10 @@ After building, navigate to the dist directory.
 
 Inside the _internal folder, move the following items into the main application directory:
 
-Models/ (entire folder)
-classes.txt
-data.yaml
-verified_image_cache.csv (optional — automatically generated at first launch)
+- Models/ (entire folder)
+- classes.txt
+- data.yaml
+- verified_image_cache.csv (optional — automatically generated at first launch)
    
 
            ┌─────────────────┐
