@@ -57,8 +57,7 @@ cd BCG-Vision
 ### 3. Run PyInstaller
 
 ### Windows 
-py -m PyInstaller --onedir --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data "classes.txt;." --add-data "data.yaml;." --add-data "Models;Models" --name "BCG-Vision" --icon=bcg_icon.ico main.pypy -m PyInstaller --onedir --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data "classes.txt;." --add-data "data.yaml;." --add-data "Models;Models" --name "BCG-Vision" --icon=bcg_icon.ico main.py
-
+py -m PyInstaller --onedir --splash splash_image.jpg --collect-all ultralytics --hidden-import torch --hidden-import torchvision --add-data "classes.txt;." --add-data "data.yaml;." --add-data "Models;Models" --name "BCG-Vision" --icon=bcg_icon.ico main.py
 ### Mac 
 python3 -m PyInstaller \
 --onedir \
