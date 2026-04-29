@@ -269,17 +269,14 @@ class DataExtraction(ResizableMixin, QMainWindow):
 
     def get_camera_site(self,file_path: str) -> str | None:
         """
-        Extracts the camera site from a file path.
-        Prefers folders that look like site IDs (for example 'R-15')
-        anywhere after 'GGNCA'."""
+        Extract the first camera site token in the file path that matches
+        the expected site ID pattern (for example 'R-15').
+        """
         parts = PureWindowsPath(file_path).parts
         site_pattern = re.compile(r"^[A-Za-z]+-\d+[A-Za-z]?$")
-        for i, part in enumerate(parts):
-            if part.upper() == "GGNCA" and i + 1 < len(parts):
-                for candidate in parts[i + 1:]:
-                    if site_pattern.match(candidate):
-                        return candidate
-                return parts[i + 1]
+        for part in parts:
+            if site_pattern.match(part):
+                return part
         return None
     
 
