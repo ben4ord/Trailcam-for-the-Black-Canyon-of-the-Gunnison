@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt
 
 from Window_Screen_Classes.image_viewer import ImageLoader
 from Helper_Classes.nav_bar import NavBar
-from Helper_Classes.window_utils import center_on_primary_screen
+from Helper_Classes.window_utils import center_on_primary_screen, ResizableMixin
 from Helper_Classes.ui_dialogs import show_help_dialog
 from Prediction_Classes.data_extraction import DataExtraction
 from datetime import datetime, timedelta
