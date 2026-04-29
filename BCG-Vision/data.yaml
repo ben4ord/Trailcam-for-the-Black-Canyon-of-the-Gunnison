@@ -1,0 +1,33 @@
+path: verified_images/dataset
+
+train: images
+val: images
+split: 0.1
+
+nc: 24
+
+names:
+  0: bighorn sheep
+  1: bird
+  2: black bear
+  3: bobcat
+  4: coyote
+  5: cow
+  6: dog
+  7: elk
+  8: chipmunk
+  9: hare
+  10: marmot
+  11: horse
+  12: deer
+  13: rodent
+  14: turkey
+  15: person
+  16: cougar
+  17: raccoon
+  18: red fox
+  19: skunk
+  20: squirrel
+  21: mustelid
+  22: unidentified animal
+  23: vehicle

@@ -1,0 +1,374 @@
+import sys
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QGridLayout,
+    QPushButton,
+    QLineEdit,
+    QLabel,
+    QWidget,
+    QMessageBox
+)
+from PySide6.QtCore import Qt,QThread
+from Window_Screen_Classes.home_menu import MenuWindow
+from Helper_Classes.nav_bar import NavBar
+from Helper_Classes.window_utils import center_on_primary_screen, pick_directory, ResizableMixin
+from Helper_Classes.verified_images import ImageCounterWorker, CountingDialog
+from pathlib import Path
+import platform
+import os
+
+class MainWindow(ResizableMixin, QMainWindow):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.resize(600, 200)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        self.setContentsMargins(0, 0, 0, 0)
+
+        central = QWidget()
+        central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        self.setCentralWidget(central)
+
+        self.nav_bar = NavBar(self)
+        self.nav_bar.set_button_visibility(
+            home=False,
+            update_labels=False,
+            new_folder=False,
+            model_selector=False,
+            training_status=False,
+            info_btn=False
+        )
+        self.setMenuWidget(self.nav_bar)
+
+        layout = QGridLayout(central)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(12)
+        layout.setColumnStretch(1, 1)
+
+        # directory selection
+        dir_btn = QPushButton('Browse')
+        dir_btn.clicked.connect(self.open_dir_dialog)
+        self.dir_name_edit = QLineEdit()
+        self.dir_name_edit.setPlaceholderText("Select the directory you want to open")
+        self.dir_name_edit.textChanged.connect(self.update_next_button_state)
+
+        # Add button to Next Window 
+        self.next_btn = QPushButton('Next')
+        self.next_btn.clicked.connect(self.next_window)
+        self.next_btn.setEnabled(False)
+        layout.addWidget(self.next_btn, 0, 0, 1, 1)
+
+        layout.addWidget(QLabel('Directory:'), 1, 0)
+        layout.addWidget(self.dir_name_edit, 1, 1, 1, 2)
+        layout.addWidget(dir_btn, 1, 3)
+
+        self.update_verified_images()
+
+        self.show()
+        self.center_window()
+
+    def open_dir_dialog(self):
+        dir_name = pick_directory(self, "Select a Directory")
+        if dir_name:
+            path = Path(dir_name)
+            self.dir_name_edit.setText(str(path))
+        self.update_next_button_state()
+
+    def update_next_button_state(self):
+        has_directory = bool(self.dir_name_edit.text().strip())
+        self.next_btn.setEnabled(has_directory)
+
+    def next_window(self):
+        if not self.dir_name_edit.text():
+            return
+        self.ensure_delete_folder()
+        self.nextWindow = MenuWindow(self.dir_name_edit.text())
+        self.nextWindow.show()
+        self.close()
+
+    def center_window(self):
+        center_on_primary_screen(self)
+
+    def update_verified_images(self):
+
+        from Helper_Classes.app_paths import verified_images_base_dir
+
+        self.base_path = verified_images_base_dir()
+
+        # Create dialog
+        self.counting_dialog = CountingDialog(self)
+        self.counting_dialog.show()
+
+        # Create thread + worker
+        self.thread = QThread()
+        self.worker = ImageCounterWorker(self.base_path)
+
+        self.worker.moveToThread(self.thread)
+
+        # Connect signals
+        self.thread.started.connect(self.worker.run)
+        self.worker.progress.connect(self.counting_dialog.update_count)
+        self.worker.finished.connect(self.on_verified_images_finished)
+        self.worker.error.connect(self.on_verified_images_error)
+
+        # Cleanup connections
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.error.connect(self.thread.quit)
+        self.worker.error.connect(self.worker.deleteLater)
+
+        self.thread.start()
+
+    def on_verified_images_finished(self, count, csv_path):
+        self.counting_dialog.close()
+        QMessageBox.information(
+            self,
+            "Update Complete",
+            f"Total images found: {count}\n\nCSV saved to:\n{csv_path}"
+            )
+
+    def on_verified_images_error(self, message):
+        self.counting_dialog.close()
+        QMessageBox.warning(self, "Update Failed", message)
+
+    def ensure_delete_folder(self):
+        # 1. Get the path from the UI and resolve it
+        input_path = Path(self.dir_name_edit.text()).resolve()
+        
+        if platform.system() == "Windows":
+            # Windows: The 'anchor' is the drive letter (e.g., D:\)
+            drive_root = Path(input_path.anchor)
+        else:
+            # Mac/Linux: Find the mount point (e.g., /Volumes/ExternalDrive)
+            drive_root = input_path
+            while not os.path.ismount(drive_root) and drive_root.parent != drive_root:
+                drive_root = drive_root.parent
+
+        # 2. Create the target path at that specific root
+        target_path = drive_root / "Recently Deleted"
+        
+        try:
+            target_path.mkdir(parents=True, exist_ok=True)
+            print(f"Verified: {target_path}")
+        except Exception as e:
+            print(f"Error creating folder on {platform.system()}: {e}")
+
+
+
+if __name__ == '__main__':
+    # Look for training in the background 
+    if "--training-subprocess" in sys.argv:
+        from Training_Classes.training_subprocess import main as training_subprocess_main
+
+        sys.exit(training_subprocess_main())
+
+    app = QApplication(sys.argv)
+    window = MainWindow()
+
+    try:
+        import pyi_splash
+        # Close the splash screen
+        pyi_splash.close()
+    except ImportError:
+        pass
+
+    app.setStyleSheet("""
+        /* ── Base surfaces ── */
+        QMainWindow, QDialog {
+            background: #202020;
+        }
+        QWidget {
+            background: #2b2b2b;
+            color: #e5e5e5;
+            font-size: 13px;
+        }
+
+        /* ── Buttons ── */
+        QPushButton {
+            background: #3d3d3d;
+            color: #e5e5e5;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            padding: 4px 10px;
+        }
+        QPushButton:hover    { background: #4d4d4d; }
+        QPushButton:pressed  { background: #272727; }
+        QPushButton:checked  { background: #0078d4; color: #ffffff; border-color: #0078d4; }
+        QPushButton:disabled { background: #2b2b2b; color: #6a6a6a; border-color: #3a3a3a; }
+
+        /* ── Text inputs ── */
+        QLineEdit, QTextEdit, QPlainTextEdit {
+            background: #1e1e1e;
+            color: #e5e5e5;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            padding: 3px 6px;
+            selection-background-color: #0078d4;
+        }
+        QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+            border-color: #0078d4;
+        }
+
+        /* ── Combo box ── */
+        QComboBox {
+            background: #3d3d3d;
+            color: #e5e5e5;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            padding: 3px 8px;
+        }
+        QComboBox:hover { background: #4d4d4d; }
+        QComboBox QAbstractItemView {
+            background: #2b2b2b;
+            color: #e5e5e5;
+            selection-background-color: #0078d4;
+            border: 1px solid #555555;
+            font-size: 13px;
+        }
+
+        /* ── Slider ── */
+        QSlider {
+            background: transparent;
+        }
+        QSlider::groove:horizontal {
+            background: #4a4a4a;
+            height: 6px;
+            border-radius: 3px;
+        }
+        QSlider::sub-page:horizontal {
+            background: #0078d4;
+            border-radius: 3px;
+        }
+        QSlider::add-page:horizontal {
+            background: #4a4a4a;
+            border-radius: 3px;
+        }
+        QSlider::handle:horizontal {
+            background: #d0d0d0;
+            width: 18px;
+            margin: -7px 0;
+            border-radius: 9px;
+            border: 1px solid #888888;
+        }
+        QSlider::handle:horizontal:hover {
+            background: #e0e0e0;
+            border-color: #a0a0a0;
+        }
+
+        /* ── Lists ── */
+        QListWidget {
+            background: #1e1e1e;
+            color: #e5e5e5;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+        }
+        QListWidget::item:selected  { background: #0078d4; color: #ffffff; }
+        QListWidget::item:hover     { background: #3a3a3a; }
+
+        /* ── Group box ── */
+        QGroupBox {
+            border: 1px solid #4a4a4a;
+            border-radius: 6px;
+            margin-top: 10px;
+            padding-top: 6px;
+            color: #b0b0b0;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            padding: 0 4px;
+            color: #b0b0b0;
+        }
+
+        /* ── Tabs ── */
+        QTabWidget::pane {
+            border: 1px solid #3a3a3a;
+            background: #2b2b2b;
+        }
+        QTabBar::tab {
+            background: #3d3d3d;
+            color: #b0b0b0;
+            padding: 5px 12px;
+            border: 1px solid #3a3a3a;
+            border-bottom: none;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        QTabBar::tab:selected { background: #2b2b2b; color: #e5e5e5; }
+        QTabBar::tab:hover    { background: #4d4d4d; }
+
+        /* ── Scrollbars ── */
+        QScrollBar:vertical {
+            background: #2b2b2b;
+            width: 10px;
+            margin: 0;
+        }
+        QScrollBar::handle:vertical {
+            background: #555555;
+            border-radius: 5px;
+            min-height: 20px;
+        }
+        QScrollBar::handle:vertical:hover { background: #707070; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+        QScrollBar:horizontal {
+            background: #2b2b2b;
+            height: 10px;
+            margin: 0;
+        }
+        QScrollBar::handle:horizontal {
+            background: #555555;
+            border-radius: 5px;
+            min-width: 20px;
+        }
+        QScrollBar::handle:horizontal:hover { background: #707070; }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+
+        /* ── Progress bar ── */
+        QProgressBar {
+            background: #1e1e1e;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            text-align: center;
+            color: #e5e5e5;
+        }
+        QProgressBar::chunk { background: #0078d4; border-radius: 4px; }
+
+        /* ── Checkbox ── */
+        QCheckBox { color: #e5e5e5; spacing: 6px; }
+        QCheckBox::indicator {
+            width: 14px;
+            height: 14px;
+            border: 1px solid #555555;
+            border-radius: 3px;
+            background: #3d3d3d;
+        }
+        QCheckBox::indicator:checked { background: #0078d4; border-color: #0078d4; }
+
+        /* ── Splitter handle ── */
+        QSplitter::handle { background: #3a3a3a; }
+        QSplitter::handle:horizontal { width: 4px; }
+        QSplitter::handle:vertical   { height: 4px; }
+
+        /* ── Nav bar (override base QWidget background) ── */
+        #navBar {
+            background: #1f2a36;
+            border-bottom: 1px solid #3b4b5f;
+        }
+        #navBar QPushButton {
+            background: transparent;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 6px;
+        }
+        #navBar QPushButton:hover    { background: #4e606f; }
+        #navBar QPushButton:pressed  { background: #1d2a37; }
+        #navBar QPushButton:disabled { background: transparent; color: #6a7a87; }
+    """)
+    
+    sys.exit(app.exec())
