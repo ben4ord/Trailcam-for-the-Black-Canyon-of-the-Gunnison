@@ -15,5 +15,4 @@ runs/
 dist/
 build/
 test_images/
-Models/
 runtime/
