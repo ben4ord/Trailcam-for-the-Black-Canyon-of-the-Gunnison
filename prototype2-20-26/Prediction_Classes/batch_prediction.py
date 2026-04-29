@@ -70,7 +70,9 @@ class BatchPrediction(ResizableMixin, QMainWindow):
 
     def start_processing(self):
         self.scan_folders_walk(self.drive)
-        self.labeler = ImageLabeler(self.model_path)
+        from Helper_Classes.model_selection_state import get_model_selection_state
+        model = self.model_path or get_model_selection_state().get()
+        self.labeler = ImageLabeler(model)
         
         self.predict_all_images()
         self.view_image_window()

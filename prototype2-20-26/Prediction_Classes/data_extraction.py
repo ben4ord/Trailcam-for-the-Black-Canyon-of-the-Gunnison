@@ -98,7 +98,8 @@ class DataExtraction(ResizableMixin, QMainWindow):
         QTimer.singleShot(0, self.start_processing)
 
     def start_processing(self):
-        self.labeler = ImageLabeler()
+        from Helper_Classes.model_selection_state import get_model_selection_state
+        self.labeler = ImageLabeler(get_model_selection_state().get())
         self.show_counting_images_popup()
         self.total_images = self.count_images(self.drive)
         self.close_counting_images_popup()
