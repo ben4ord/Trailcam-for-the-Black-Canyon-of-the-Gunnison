@@ -69,6 +69,7 @@ class ExportWindow(ResizableMixin, QMainWindow):
         self.time_selection.addItem("15 Minutes",userData=timedelta(minutes=15))
         self.time_selection.addItem("30 Minutes",userData=timedelta(minutes=30))
         self.time_selection.addItem("1 Hour",userData=timedelta(hours=1))
+        self.time_selection.addItem("None (0 Seconds)",userData=timedelta(seconds=0))
 
         time_col = QVBoxLayout()
         time_col.setSpacing(8)

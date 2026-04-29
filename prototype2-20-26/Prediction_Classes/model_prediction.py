@@ -11,7 +11,7 @@ from datetime import datetime
 from Helper_Classes.app_paths import models_dir
 
 
-DEFAULT_MODEL = str(models_dir() / "best.pt")
+DEFAULT_MODEL = str(models_dir() / "less_people/weights/best.pt")
 
 class ImageLabeler:
     def __init__(self, model_path: str = ""):
