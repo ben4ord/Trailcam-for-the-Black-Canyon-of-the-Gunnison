@@ -46,9 +46,9 @@ The primary objective of this application is to extract animal population statis
 ### 1. Create a Virtual Environment
 
 Create and activate a new virtual environment, then install all required pip packages listed in `pipInstalls.txt`.
-pip install -r pipInstalls.txt
+- pip install -r pipInstalls.txt
 You may need this extra install for Torch to work properly with a GPU 
-pip install -r pipInstalls.txt --extra-index-url https://download.pytorch.org/whl/cu121
+- pip install -r pipInstalls.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 ### 2. Navigate to the Project Directory
 
