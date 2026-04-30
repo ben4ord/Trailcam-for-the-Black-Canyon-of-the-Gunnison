@@ -4,7 +4,7 @@ train: images
 val: images
 split: 0.1
 
-nc: 25
+nc: 24
 
 names:
   0: bighorn sheep
@@ -31,4 +31,3 @@ names:
   21: mustelid
   22: unidentified animal
   23: vehicle
-  24: crow
